@@ -16,7 +16,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ${{ github.workspace }}/${{ env.GOMOD_PATH }}
+          go-version-file: ${{ github.workspace }}/go.mod
           cache: true
 
       - name: Go fmt (check)
@@ -27,5 +27,4 @@ jobs:
         run: |
           go test ./...
 
-env:
-  GOMOD_PATH: "${{ env.GOMOD_PATH }}"
+# (no global env needed)
