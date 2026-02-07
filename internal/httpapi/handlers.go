@@ -16,7 +16,9 @@ type API struct {
 }
 
 type createUnitReq struct {
-	Name        string `json:"name"`
+	Key         string `json:"key,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -32,18 +34,46 @@ func (a API) handleCreateUnit(w http.ResponseWriter, r *http.Request) {
 		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid json: %v", err)
 		return
 	}
-	if strings.TrimSpace(req.Description) == "" {
+	// Support multiple client shapes for backward compatibility:
+	// - Preferred: {"title":"...","description":"...","key":"..."}
+	// - Legacy tests/clients: {"name":"desired-key","description":"title"}
+	var titleVal string
+	var keyVal string
+	var descVal string
+	if strings.TrimSpace(req.Title) != "" {
+		titleVal = req.Title
+		keyVal = req.Key
+		descVal = req.Description
+	} else if strings.TrimSpace(req.Name) != "" && strings.TrimSpace(req.Description) != "" {
+		// legacy behavior: name==key, description==title
+		keyVal = req.Name
+		titleVal = req.Description
+		descVal = req.Description
+	} else if strings.TrimSpace(req.Name) != "" {
+		// treat name as title if no description provided
+		titleVal = req.Name
+		keyVal = req.Key
+		descVal = req.Description
+	}
+
+	if strings.TrimSpace(titleVal) == "" {
 		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "title required")
 		return
 	}
 
-	in := ports.CreateUnitRequest{Key: req.Name, Title: req.Description}
+	in := ports.CreateUnitRequest{Key: keyVal, Title: titleVal, Description: descVal}
 	out, err := a.Units.CreateUnit(in)
 	if err != nil {
 		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
 		return
 	}
-	_ = j.Write(w, http.StatusCreated, createUnitRes{UnitID: out.UnitID, CreatedAt: time.Now().UTC().Format(time.RFC3339), Key: out.Key})
+	_ = j.Write(w, http.StatusCreated, struct {
+		UnitID      string `json:"unitId"`
+		CreatedAt   string `json:"createdAt"`
+		Key         string `json:"key"`
+		Title       string `json:"title"`
+		Description string `json:"description,omitempty"`
+	}{UnitID: out.UnitID, CreatedAt: time.Now().UTC().Format(time.RFC3339), Key: out.Key, Title: out.Title, Description: out.Description})
 }
 
 type createVersionReq struct {

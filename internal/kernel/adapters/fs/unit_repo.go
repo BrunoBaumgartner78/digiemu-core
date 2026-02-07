@@ -62,11 +62,12 @@ func (r *UnitRepo) SaveUnit(u domain.Unit) error {
 	defer r.mu.Unlock()
 
 	ur := UnitRecord{
-		ID:        u.ID,
-		Key:       u.Key,
-		Title:     u.Title,
-		CreatedAt: nowRFC3339(),
-		Versions:  []VersionRecord{},
+		ID:          u.ID,
+		Key:         u.Key,
+		Title:       u.Title,
+		Description: u.Description,
+		CreatedAt:   nowRFC3339(),
+		Versions:    []VersionRecord{},
 	}
 
 	data, err := json.MarshalIndent(ur, "", "  ")
@@ -103,7 +104,7 @@ func (r *UnitRepo) FindUnitByKey(key string) (domain.Unit, bool, error) {
 			return domain.Unit{}, false, err
 		}
 		if ur.Key == key {
-			return domain.Unit{ID: ur.ID, Key: ur.Key, Title: ur.Title}, true, nil
+			return domain.Unit{ID: ur.ID, Key: ur.Key, Title: ur.Title, Description: ur.Description}, true, nil
 		}
 	}
 	return domain.Unit{}, false, nil
@@ -125,7 +126,7 @@ func (r *UnitRepo) FindUnitByID(id string) (domain.Unit, bool, error) {
 	if err := json.Unmarshal(b, &ur); err != nil {
 		return domain.Unit{}, false, err
 	}
-	return domain.Unit{ID: ur.ID, Key: ur.Key, Title: ur.Title}, true, nil
+	return domain.Unit{ID: ur.ID, Key: ur.Key, Title: ur.Title, Description: ur.Description}, true, nil
 }
 
 func (r *UnitRepo) SaveVersion(v domain.Version) error {

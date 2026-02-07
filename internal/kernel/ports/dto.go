@@ -4,14 +4,16 @@ package ports
 // from domain or adapter types.
 
 type CreateUnitRequest struct {
-	Key   string
-	Title string
+	Key         string
+	Title       string
+	Description string
 }
 
 type CreateUnitResponse struct {
-	UnitID string
-	Key    string
-	Title  string
+	UnitID      string
+	Key         string
+	Title       string
+	Description string
 }
 
 type CreateVersionRequest struct {

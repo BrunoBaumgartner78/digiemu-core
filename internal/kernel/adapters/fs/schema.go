@@ -11,11 +11,12 @@ type VersionRecord struct {
 }
 
 type UnitRecord struct {
-	ID        string          `json:"id"`
-	Key       string          `json:"key"`
-	Title     string          `json:"title"`
-	CreatedAt string          `json:"created_at"`
-	Versions  []VersionRecord `json:"versions"`
+	ID          string          `json:"id"`
+	Key         string          `json:"key"`
+	Title       string          `json:"title"`
+	Description string          `json:"description,omitempty"`
+	CreatedAt   string          `json:"created_at"`
+	Versions    []VersionRecord `json:"versions"`
 }
 
 func nowRFC3339() string {

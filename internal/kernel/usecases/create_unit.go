@@ -12,7 +12,7 @@ type CreateUnit struct {
 
 // CreateUnit implements ports.CreateUnitUsecase
 func (uc CreateUnit) CreateUnit(in ports.CreateUnitRequest) (ports.CreateUnitResponse, error) {
-	u, err := domain.NewUnit(in.Key, in.Title)
+	u, err := domain.NewUnit(in.Key, in.Title, in.Description)
 	if err != nil {
 		return ports.CreateUnitResponse{}, err
 	}
@@ -30,8 +30,9 @@ func (uc CreateUnit) CreateUnit(in ports.CreateUnitRequest) (ports.CreateUnitRes
 	}
 
 	return ports.CreateUnitResponse{
-		UnitID: u.ID,
-		Key:    u.Key,
-		Title:  u.Title,
+		UnitID:      u.ID,
+		Key:         u.Key,
+		Title:       u.Title,
+		Description: u.Description,
 	}, nil
 }

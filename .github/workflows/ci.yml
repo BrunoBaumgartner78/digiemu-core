@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      RUN_RACE: 'false'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,8 +25,16 @@ jobs:
         run: |
           test -z "$(gofmt -l .)"
 
+      - name: Go vet
+        run: |
+          go vet ./...
+
       - name: Go test
         run: |
-          go test ./...
+          if [ "${{ env.RUN_RACE }}" = "true" ]; then
+            go test -race ./...
+          else
+            go test ./...
+          fi
 
 # (no global env needed)
