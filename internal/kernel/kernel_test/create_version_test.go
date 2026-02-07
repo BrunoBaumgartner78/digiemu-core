@@ -3,6 +3,7 @@ package kernel_test
 import (
 	"digiemu-core/internal/kernel/adapters/memory"
 	"digiemu-core/internal/kernel/domain"
+	"digiemu-core/internal/kernel/ports"
 	"digiemu-core/internal/kernel/usecases"
 	"testing"
 )
@@ -11,7 +12,7 @@ func TestCreateVersion_HappyPath(t *testing.T) {
 	repo := memory.NewUnitRepo()
 
 	createUnit := usecases.CreateUnit{Repo: repo}
-	unitOut, err := createUnit.Execute(usecases.CreateUnitInput{
+	unitOut, err := createUnit.CreateUnit(ports.CreateUnitRequest{
 		Key:   "merkblatt-steuern",
 		Title: "Merkblatt Steuern",
 	})
@@ -20,7 +21,7 @@ func TestCreateVersion_HappyPath(t *testing.T) {
 	}
 
 	uc := usecases.CreateVersion{Repo: repo}
-	out, err := uc.Execute(usecases.CreateVersionInput{
+	out, err := uc.CreateVersion(ports.CreateVersionRequest{
 		UnitKey: "merkblatt-steuern",
 		Label:   "v1",
 		Content: "Inhalt 1",
@@ -28,11 +29,11 @@ func TestCreateVersion_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
-	if out.Version.UnitID != unitOut.Unit.ID {
+	if out.UnitID != unitOut.UnitID {
 		t.Fatalf("expected unitID match")
 	}
 
-	vs, _ := repo.ListVersionsByUnitID(unitOut.Unit.ID)
+	vs, _ := repo.ListVersionsByUnitID(unitOut.UnitID)
 	if len(vs) != 1 {
 		t.Fatalf("expected 1 version, got %d", len(vs))
 	}
@@ -42,7 +43,7 @@ func TestCreateVersion_UnitNotFound(t *testing.T) {
 	repo := memory.NewUnitRepo()
 	uc := usecases.CreateVersion{Repo: repo}
 
-	_, err := uc.Execute(usecases.CreateVersionInput{
+	_, err := uc.CreateVersion(ports.CreateVersionRequest{
 		UnitKey: "does-not-exist",
 		Label:   "v1",
 		Content: "x",
@@ -55,16 +56,16 @@ func TestCreateVersion_UnitNotFound(t *testing.T) {
 func TestCreateVersion_Validation(t *testing.T) {
 	repo := memory.NewUnitRepo()
 	createUnit := usecases.CreateUnit{Repo: repo}
-	_, _ = createUnit.Execute(usecases.CreateUnitInput{Key: "abc", Title: "Title"})
+	_, _ = createUnit.CreateUnit(ports.CreateUnitRequest{Key: "abc", Title: "Title"})
 
 	uc := usecases.CreateVersion{Repo: repo}
 
-	_, err := uc.Execute(usecases.CreateVersionInput{UnitKey: "abc", Label: "", Content: "x"})
+	_, err := uc.CreateVersion(ports.CreateVersionRequest{UnitKey: "abc", Label: "", Content: "x"})
 	if err != domain.ErrInvalidVersionLabel {
 		t.Fatalf("expected ErrInvalidVersionLabel, got %v", err)
 	}
 
-	_, err = uc.Execute(usecases.CreateVersionInput{UnitKey: "abc", Label: "v1", Content: ""})
+	_, err = uc.CreateVersion(ports.CreateVersionRequest{UnitKey: "abc", Label: "v1", Content: ""})
 	if err != domain.ErrEmptyContent {
 		t.Fatalf("expected ErrEmptyContent, got %v", err)
 	}

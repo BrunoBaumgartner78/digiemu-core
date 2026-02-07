@@ -5,37 +5,34 @@ import (
 	"digiemu-core/internal/kernel/ports"
 )
 
-type CreateVersionInput struct {
-	UnitKey string
-	Label   string
-	Content string
-}
-
-type CreateVersionOutput struct {
-	Version domain.Version
-}
-
+// CreateVersion is the usecase implementation.
 type CreateVersion struct {
 	Repo ports.UnitRepository
 }
 
-func (uc CreateVersion) Execute(in CreateVersionInput) (CreateVersionOutput, error) {
+// CreateVersion implements ports.CreateVersionUsecase
+func (uc CreateVersion) CreateVersion(in ports.CreateVersionRequest) (ports.CreateVersionResponse, error) {
 	unit, ok, err := uc.Repo.FindUnitByKey(in.UnitKey)
 	if err != nil {
-		return CreateVersionOutput{}, err
+		return ports.CreateVersionResponse{}, err
 	}
 	if !ok {
-		return CreateVersionOutput{}, domain.ErrUnitNotFound
+		return ports.CreateVersionResponse{}, domain.ErrUnitNotFound
 	}
 
 	v, err := domain.NewVersion(unit.ID, in.Label, in.Content)
 	if err != nil {
-		return CreateVersionOutput{}, err
+		return ports.CreateVersionResponse{}, err
 	}
 
 	if err := uc.Repo.SaveVersion(v); err != nil {
-		return CreateVersionOutput{}, err
+		return ports.CreateVersionResponse{}, err
 	}
 
-	return CreateVersionOutput{Version: v}, nil
+	return ports.CreateVersionResponse{
+		VersionID: v.ID,
+		UnitID:    v.UnitID,
+		Label:     v.Label,
+		Content:   v.Content,
+	}, nil
 }

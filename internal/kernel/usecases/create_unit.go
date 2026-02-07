@@ -5,36 +5,33 @@ import (
 	"digiemu-core/internal/kernel/ports"
 )
 
-type CreateUnitInput struct {
-	Key   string
-	Title string
-}
-
-type CreateUnitOutput struct {
-	Unit domain.Unit
-}
-
+// CreateUnit is the usecase implementation.
 type CreateUnit struct {
 	Repo ports.UnitRepository
 }
 
-func (uc CreateUnit) Execute(in CreateUnitInput) (CreateUnitOutput, error) {
+// CreateUnit implements ports.CreateUnitUsecase
+func (uc CreateUnit) CreateUnit(in ports.CreateUnitRequest) (ports.CreateUnitResponse, error) {
 	u, err := domain.NewUnit(in.Key, in.Title)
 	if err != nil {
-		return CreateUnitOutput{}, err
+		return ports.CreateUnitResponse{}, err
 	}
 
 	exists, err := uc.Repo.ExistsByKey(u.Key)
 	if err != nil {
-		return CreateUnitOutput{}, err
+		return ports.CreateUnitResponse{}, err
 	}
 	if exists {
-		return CreateUnitOutput{}, domain.ErrUnitAlreadyExists
+		return ports.CreateUnitResponse{}, domain.ErrUnitAlreadyExists
 	}
 
 	if err := uc.Repo.SaveUnit(u); err != nil {
-		return CreateUnitOutput{}, err
+		return ports.CreateUnitResponse{}, err
 	}
 
-	return CreateUnitOutput{Unit: u}, nil
+	return ports.CreateUnitResponse{
+		UnitID: u.ID,
+		Key:    u.Key,
+		Title:  u.Title,
+	}, nil
 }
