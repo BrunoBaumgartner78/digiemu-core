@@ -3,14 +3,16 @@ package domain
 import "strings"
 
 type Unit struct {
-	ID    string
-	Key   string
-	Title string
+	ID          string
+	Key         string
+	Title       string
+	Description string
 }
 
-func NewUnit(key, title string) (Unit, error) {
+func NewUnit(key, title, description string) (Unit, error) {
 	key = strings.TrimSpace(key)
 	title = strings.TrimSpace(title)
+	description = strings.TrimSpace(description)
 
 	if len(key) < 3 {
 		return Unit{}, ErrInvalidUnitKey
@@ -20,8 +22,9 @@ func NewUnit(key, title string) (Unit, error) {
 	}
 
 	return Unit{
-		ID:    NewID("unit"),
-		Key:   key,
-		Title: title,
+		ID:          NewID("unit"),
+		Key:         key,
+		Title:       title,
+		Description: description,
 	}, nil
 }
