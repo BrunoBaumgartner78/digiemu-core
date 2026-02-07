@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	j "digiemu-core/internal/httpapi/json"
@@ -28,18 +29,18 @@ type createUnitRes struct {
 func (a API) handleCreateUnit(w http.ResponseWriter, r *http.Request) {
 	var req createUnitReq
 	if err := j.Read(r, &req); err != nil {
-		j.Error(w, http.StatusBadRequest, "invalid json")
+		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid json: %v", err)
 		return
 	}
-	if req.Name == "" {
-		j.Error(w, http.StatusBadRequest, "name required")
+	if strings.TrimSpace(req.Description) == "" {
+		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "title required")
 		return
 	}
 
 	in := ports.CreateUnitRequest{Key: req.Name, Title: req.Description}
 	out, err := a.Units.CreateUnit(in)
 	if err != nil {
-		j.Error(w, http.StatusInternalServerError, err.Error())
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
 		return
 	}
 	_ = j.Write(w, http.StatusCreated, createUnitRes{UnitID: out.UnitID, CreatedAt: time.Now().UTC().Format(time.RFC3339), Key: out.Key})
@@ -58,11 +59,11 @@ type createVersionRes struct {
 func (a API) handleCreateVersion(w http.ResponseWriter, r *http.Request, unitKey string) {
 	var req createVersionReq
 	if err := j.Read(r, &req); err != nil {
-		j.Error(w, http.StatusBadRequest, "invalid json")
+		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid json: %v", err)
 		return
 	}
-	if req.Content == "" {
-		j.Error(w, http.StatusBadRequest, "content required")
+	if strings.TrimSpace(req.Content) == "" {
+		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "content required")
 		return
 	}
 
@@ -73,10 +74,10 @@ func (a API) handleCreateVersion(w http.ResponseWriter, r *http.Request, unitKey
 	if err != nil {
 		// if unit not found, map to 404
 		if err == domain.ErrUnitNotFound {
-			j.Error(w, http.StatusNotFound, "unit not found")
+			j.ErrorCode(w, http.StatusNotFound, "UNIT_NOT_FOUND", "unit not found", nil)
 			return
 		}
-		j.Error(w, http.StatusInternalServerError, err.Error())
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
 		return
 	}
 	_ = j.Write(w, http.StatusCreated, createVersionRes{VersionID: out.VersionID, CreatedAt: time.Now().UTC().Format(time.RFC3339)})

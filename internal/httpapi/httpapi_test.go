@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -80,4 +81,79 @@ func TestAPI_Version_UnknownUnit_404(t *testing.T) {
 	if res.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", res.StatusCode)
 	}
+}
+
+func TestAPI_ValidationAndErrors(t *testing.T) {
+	dir := t.TempDir()
+	repo := fsrepo.NewUnitRepo(dir)
+	api := API{Units: usecases.CreateUnit{Repo: repo}, Vers: usecases.CreateVersion{Repo: repo}}
+	srv := httptest.NewServer(NewRouter(api))
+	defer srv.Close()
+
+	// 1) POST /v1/units with empty title => 400 VALIDATION_ERROR
+	b, _ := json.Marshal(map[string]string{"name": ""})
+	res, err := http.Post(srv.URL+"/v1/units", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("post unit err: %v", err)
+	}
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", res.StatusCode)
+	}
+	var errBody map[string]map[string]interface{}
+	_ = json.NewDecoder(res.Body).Decode(&errBody)
+	res.Body.Close()
+	if errBody["error"]["code"] != "VALIDATION_ERROR" {
+		t.Fatalf("expected VALIDATION_ERROR, got %v", errBody["error"]["code"])
+	}
+
+	// 2) POST /v1/units valid => 201 + includes key
+	b, _ = json.Marshal(map[string]string{"name": "ok-unit", "description": "desc"})
+	res, err = http.Post(srv.URL+"/v1/units", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("post unit err: %v", err)
+	}
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", res.StatusCode)
+	}
+	var cru struct {
+		Key string `json:"key"`
+	}
+	_ = json.NewDecoder(res.Body).Decode(&cru)
+	res.Body.Close()
+	if cru.Key == "" {
+		t.Fatalf("expected key in response")
+	}
+
+	// 3) POST /v1/units/{key}/versions with empty content => 400 VALIDATION_ERROR
+	b, _ = json.Marshal(map[string]string{"content": ""})
+	res, err = http.Post(srv.URL+"/v1/units/"+cru.Key+"/versions", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("post version err: %v", err)
+	}
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", res.StatusCode)
+	}
+	var eb map[string]map[string]interface{}
+	_ = json.NewDecoder(res.Body).Decode(&eb)
+	res.Body.Close()
+	if eb["error"]["code"] != "VALIDATION_ERROR" {
+		t.Fatalf("expected VALIDATION_ERROR, got %v", eb["error"]["code"])
+	}
+
+	// 4) POST /v1/units/{missing}/versions => 404 UNIT_NOT_FOUND
+	b, _ = json.Marshal(map[string]string{"content": "x"})
+	res, err = http.Post(srv.URL+"/v1/units/does-not-exist/versions", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("post version err: %v", err)
+	}
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", res.StatusCode)
+	}
+	var eb2 map[string]map[string]interface{}
+	_ = json.NewDecoder(res.Body).Decode(&eb2)
+	res.Body.Close()
+	if eb2["error"]["code"] != "UNIT_NOT_FOUND" {
+		t.Fatalf("expected UNIT_NOT_FOUND, got %v", eb2["error"]["code"])
+	}
+	_ = io.EOF
 }

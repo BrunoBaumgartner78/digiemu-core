@@ -20,10 +20,15 @@ func NewRouter(api API) http.Handler {
 			api.handleCreateUnit(w, r)
 			return
 		case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/units/") && strings.HasSuffix(p, "/versions"):
-			// extract unit key between
+			// expecting: /v1/units/{key}/versions
 			parts := strings.Split(p, "/")
-			if len(parts) >= 5 {
+			// parts: ["", "v1", "units", "{key}", "versions"]
+			if len(parts) == 5 && parts[1] == "v1" && parts[2] == "units" && parts[4] == "versions" {
 				unitKey := parts[3]
+				if unitKey == "" {
+					http.NotFound(w, r)
+					return
+				}
 				api.handleCreateVersion(w, r, unitKey)
 				return
 			}
