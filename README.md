@@ -26,10 +26,24 @@ Run the minimal HTTP API (uses FS adapter):
 DIGIEMU_DATA_DIR=./data DIGIEMU_ADDR=:8080 go run ./cmd/api
 ```
 
-Create a unit:
+Create a unit (example request + response):
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"name":"my-unit","description":"desc"}' http://localhost:8080/v1/units
+curl -s -X POST http://localhost:8080/v1/units \
+	-H "Content-Type: application/json" \
+	-d '{"title":"Demo Unit","description":"Short description"}'
+```
+
+Example response (201):
+
+```json
+{
+	"unitId": "unit_01...",
+	"createdAt": "2026-02-07T12:34:56Z",
+	"key": "demo-unit",
+	"title": "Demo Unit",
+	"description": "Short description"
+}
 ```
 
 Create a version:
@@ -48,20 +62,30 @@ Quickstart — start the server and use curl (copy/paste):
 go run ./cmd/api --addr :8080 --data ./data
 ```
 
-2) Create a unit (returns `key` in response):
+2) Create a unit (returns `key` and metadata in response):
 
 ```bash
 curl -s -X POST http://localhost:8080/v1/units \
 	-H "Content-Type: application/json" \
-	-d '{"name":"Demo Unit","description":"Demo"}'
+	-d '{"title":"Demo Unit","description":"Demo"}'
 ```
 
-3) Create a version for that unit (use returned `{key}`):
+3) Create a version for that unit (use returned `{key}`).
 
+Request:
 ```bash
 curl -s -X POST http://localhost:8080/v1/units/demo-unit/versions \
 	-H "Content-Type: application/json" \
 	-d '{"content":"v1"}'
+```
+
+Example response (201):
+
+```json
+{
+	"versionId": "ver_01...",
+	"createdAt": "2026-02-07T12:35:10Z"
+}
 ```
 
 Note: the create-unit response contains the `key` you should use in the versions endpoint.
