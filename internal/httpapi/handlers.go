@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	j "digiemu-core/internal/httpapi/json"
 	"digiemu-core/internal/kernel/domain"
 	"digiemu-core/internal/kernel/ports"
 )
@@ -26,22 +27,22 @@ type createUnitRes struct {
 
 func (a API) handleCreateUnit(w http.ResponseWriter, r *http.Request) {
 	var req createUnitReq
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if err := j.Read(r, &req); err != nil {
+		j.Error(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	if req.Name == "" {
-		writeError(w, http.StatusBadRequest, "name required")
+		j.Error(w, http.StatusBadRequest, "name required")
 		return
 	}
 
 	in := ports.CreateUnitRequest{Key: req.Name, Title: req.Description}
 	out, err := a.Units.CreateUnit(in)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		j.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, createUnitRes{UnitID: out.UnitID, CreatedAt: time.Now().UTC().Format(time.RFC3339), Key: out.Key})
+	_ = j.Write(w, http.StatusCreated, createUnitRes{UnitID: out.UnitID, CreatedAt: time.Now().UTC().Format(time.RFC3339), Key: out.Key})
 }
 
 type createVersionReq struct {
@@ -56,12 +57,12 @@ type createVersionRes struct {
 
 func (a API) handleCreateVersion(w http.ResponseWriter, r *http.Request, unitKey string) {
 	var req createVersionReq
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if err := j.Read(r, &req); err != nil {
+		j.Error(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	if req.Content == "" {
-		writeError(w, http.StatusBadRequest, "content required")
+		j.Error(w, http.StatusBadRequest, "content required")
 		return
 	}
 
@@ -72,13 +73,13 @@ func (a API) handleCreateVersion(w http.ResponseWriter, r *http.Request, unitKey
 	if err != nil {
 		// if unit not found, map to 404
 		if err == domain.ErrUnitNotFound {
-			writeError(w, http.StatusNotFound, "unit not found")
+			j.Error(w, http.StatusNotFound, "unit not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		j.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, createVersionRes{VersionID: out.VersionID, CreatedAt: time.Now().UTC().Format(time.RFC3339)})
+	_ = j.Write(w, http.StatusCreated, createVersionRes{VersionID: out.VersionID, CreatedAt: time.Now().UTC().Format(time.RFC3339)})
 }
 
 func (a API) handleHealth(w http.ResponseWriter, r *http.Request) {
