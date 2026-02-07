@@ -69,3 +69,5 @@ Flags supported by the CLI:
 - `--title`, `--desc`: unit creation
 - `--key`: optional explicit unit key
 - `--unit`, `--content`: version creation
+
+Small tweaks: commands above are copy/paste ready for local testing.
