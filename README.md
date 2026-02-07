@@ -38,6 +38,34 @@ Create a version:
 curl -X POST -H "Content-Type: application/json" -d '{"content":"hello"}' http://localhost:8080/v1/units/my-unit/versions
 ```
 
+## HTTP API (cmd/api)
+
+Quickstart — start the server and use curl (copy/paste):
+
+1) Start server:
+
+```bash
+go run ./cmd/api --addr :8080 --data ./data
+```
+
+2) Create a unit (returns `key` in response):
+
+```bash
+curl -s -X POST http://localhost:8080/v1/units \
+	-H "Content-Type: application/json" \
+	-d '{"name":"Demo Unit","description":"Demo"}'
+```
+
+3) Create a version for that unit (use returned `{key}`):
+
+```bash
+curl -s -X POST http://localhost:8080/v1/units/demo-unit/versions \
+	-H "Content-Type: application/json" \
+	-d '{"content":"v1"}'
+```
+
+Note: the create-unit response contains the `key` you should use in the versions endpoint.
+
 ## Local Quickstart (CLI + FS)
 
 This repository includes a tiny CLI that uses the FS adapter for local demos.
