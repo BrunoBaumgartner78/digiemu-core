@@ -34,3 +34,18 @@ type MeaningSetData struct {
 		Purpose string `json:"purpose,omitempty"`
 	} `json:"inline_preview,omitempty"`
 }
+
+type ClaimSetData struct {
+	UnitID       string `json:"unit_id,omitempty"`
+	VersionID    string `json:"version_id,omitempty"`
+	ClaimSetHash string `json:"claimset_hash"`
+	ClaimSetPath string `json:"claimset_path,omitempty"`
+}
+
+type ClaimRelationSetData struct {
+	UnitID      string `json:"unit_id,omitempty"`
+	VersionID   string `json:"version_id,omitempty"`
+	Type        string `json:"type"`
+	FromClaimID string `json:"from_claim_id"`
+	ToClaimID   string `json:"to_claim_id"`
+}

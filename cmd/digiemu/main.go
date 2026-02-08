@@ -29,6 +29,8 @@ func main() {
 	switch os.Args[1] {
 	case "meaning":
 		runMeaning(os.Args[2:])
+	case "claim":
+		runClaim(os.Args[2:])
 	case "unit":
 		runUnit(os.Args[2:])
 	case "version":
@@ -60,6 +62,8 @@ func printUsage() {
 	fmt.Println("  digiemu serve [--addr :8080] [--data ./data]")
 	fmt.Println("  digiemu meaning set <unitKeyOrId> [--version <versionId>] --file <meaning.json> [--data ./data]")
 	fmt.Println("  digiemu meaning show <unitKeyOrId> [--version <versionId>] [--data ./data]")
+	fmt.Println("  digiemu claim set <unitKeyOrId> [--version <versionId>] --file <claimset.json> [--data ./data]")
+	fmt.Println("  digiemu claim show <unitKeyOrId> [--version <versionId>] [--data ./data]")
 }
 
 func runUnit(args []string) {
@@ -267,6 +271,115 @@ func runMeaning(args []string) {
 	}
 }
 
+func runClaim(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "claim subcommands: set | show")
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "set":
+		fs := flag.NewFlagSet("claim set", flag.ExitOnError)
+		version := fs.String("version", "", "version id (optional, defaults to head)")
+		file := fs.String("file", "", "path to claimset.json")
+		data := fs.String("data", "./data", "data directory")
+		fs.Parse(args[1:])
+
+		if *file == "" {
+			fmt.Fprintln(os.Stderr, "--file is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		rem := fs.Args()
+		if len(rem) == 0 {
+			fmt.Fprintln(os.Stderr, "unit key or id is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		unitKeyOrID := rem[0]
+
+		b, err := os.ReadFile(*file)
+		if err != nil {
+			log.Fatalf("read file: %v", err)
+		}
+
+		repo := fsrepo.NewUnitRepo(*data)
+		audit := fsrepo.NewAuditLog(*data)
+		clock := mem.RealClock{}
+
+		uc := usecases.SetClaims{Repo: repo, Audit: audit, Clock: clock}
+		out, err := uc.SetClaims(ports.SetClaimsRequest{UnitKey: unitKeyOrID, VersionID: *version, BodyBytes: b, ActorID: "cli"})
+		if err != nil {
+			log.Fatalf("set claims: %v", err)
+		}
+		fmt.Printf("OK: unit_id=%s version_id=%s claimset_hash=%s\n", out.UnitID, out.VersionID, out.ClaimSetHash)
+
+	case "show":
+		fs := flag.NewFlagSet("claim show", flag.ExitOnError)
+		version := fs.String("version", "", "version id (optional, defaults to head)")
+		data := fs.String("data", "./data", "data directory")
+		fs.Parse(args[1:])
+
+		repo := fsrepo.NewUnitRepo(*data)
+
+		rem := fs.Args()
+		if len(rem) == 0 {
+			fmt.Fprintln(os.Stderr, "unit key or id is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		keyOrID := rem[0]
+		var unit domain.Unit
+		var ok bool
+		var errFind error
+		unit, ok, errFind = repo.FindUnitByKey(keyOrID)
+		if errFind != nil {
+			log.Fatalf("find unit: %v", errFind)
+		}
+		if !ok {
+			unit, ok, errFind = repo.FindUnitByID(keyOrID)
+			if errFind != nil {
+				log.Fatalf("find unit by id: %v", errFind)
+			}
+			if !ok {
+				log.Fatalf("unit not found: %s", keyOrID)
+			}
+		}
+
+		verID := *version
+		if verID == "" {
+			verID = unit.HeadVersionID
+		}
+		if verID == "" {
+			log.Fatalf("no version specified and unit has no head")
+		}
+
+		v, found, err := repo.FindVersionByID(verID)
+		if err != nil {
+			log.Fatalf("find version: %v", err)
+		}
+		if !found {
+			log.Fatalf("version not found: %s", verID)
+		}
+
+		cs, ok, err := repo.LoadClaimSet(unit.ID, verID)
+		if err != nil {
+			log.Fatalf("load claimset: %v", err)
+		}
+		if !ok {
+			log.Fatalf("claimset not found for %s %s", unit.ID, verID)
+		}
+
+		jb, _ := json.MarshalIndent(cs, "", "  ")
+		fmt.Println(string(jb))
+		fmt.Printf("claimset_hash=%s\n", v.ClaimSetHash)
+
+	default:
+		fmt.Fprintln(os.Stderr, "claim subcommands: set | show")
+		os.Exit(2)
+	}
+}
+
 func runAudit(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "audit subcommands: verify | tail")
@@ -355,8 +468,11 @@ func runServe(args []string) {
 
 	// Minimal HTTP wiring (no audit in HTTP routes here unless your httpapi already injects it)
 	api := httpapi.API{
-		Units: usecases.CreateUnit{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
-		Vers:  usecases.CreateVersion{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Units:   usecases.CreateUnit{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Vers:    usecases.CreateVersion{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Meaning: usecases.SetMeaning{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Claims:  usecases.SetClaims{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Repo:    repo,
 	}
 	handler := httpapi.NewRouter(api)
 

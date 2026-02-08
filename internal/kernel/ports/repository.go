@@ -28,4 +28,9 @@ type UnitRepository interface {
 	// persistence operations and MUST NOT emit audit events.
 	SaveMeaning(unitID, versionID string, meaning domain.Meaning, meaningHash string) error
 	LoadMeaning(unitID, versionID string) (domain.Meaning, bool, error)
+
+	// ClaimSet persistence (version-scoped). Implementations MUST only persist
+	// data and MUST NOT emit audit events.
+	SaveClaimSet(unitID, versionID string, claimSet domain.ClaimSet, claimSetHash string) error
+	LoadClaimSet(unitID, versionID string) (domain.ClaimSet, bool, error)
 }

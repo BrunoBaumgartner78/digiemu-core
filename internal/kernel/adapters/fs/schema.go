@@ -14,6 +14,7 @@ type VersionRecord struct {
 	ContentHash   string `json:"content_hash,omitempty"`
 	ActorID       string `json:"actor_id,omitempty"`
 	MeaningHash   string `json:"meaning_hash,omitempty"`
+	ClaimSetHash  string `json:"claimset_hash,omitempty"`
 }
 
 type UnitRecord struct {

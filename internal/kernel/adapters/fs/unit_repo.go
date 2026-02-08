@@ -335,6 +335,7 @@ func (r *UnitRepo) ListVersionsByUnitID(unitID string) ([]domain.Version, error)
 			ContentHash:   vr.ContentHash,
 			ActorID:       vr.ActorID,
 			MeaningHash:   vr.MeaningHash,
+			ClaimSetHash:  vr.ClaimSetHash,
 		})
 	}
 	return out, nil
@@ -347,6 +348,14 @@ func (r *UnitRepo) meaningPath(unitID, versionID string) string {
 
 func (r *UnitRepo) meaningTempPath(unitID, versionID string) string {
 	return filepath.Join(r.unitsDir, unitID+"."+versionID+".meaning.json.tmp")
+}
+
+func (r *UnitRepo) claimsetPath(unitID, versionID string) string {
+	return filepath.Join(r.unitsDir, unitID+"."+versionID+".claimset.json")
+}
+
+func (r *UnitRepo) claimsetTempPath(unitID, versionID string) string {
+	return filepath.Join(r.unitsDir, unitID+"."+versionID+".claimset.json.tmp")
 }
 
 // SaveMeaning stores a canonicalized meaning.json for the unit atomically.
@@ -408,6 +417,85 @@ func (r *UnitRepo) SaveMeaning(unitID, versionID string, m domain.Meaning, meani
 		return err
 	}
 	return nil
+}
+
+// SaveClaimSet stores a canonicalized claimset JSON for the unit atomically and
+// updates the embedded version record's claimset_hash. Returns ErrUnitNotFound
+// or ErrVersionNotFound where applicable.
+func (r *UnitRepo) SaveClaimSet(unitID, versionID string, cs domain.ClaimSet, claimSetHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p := r.unitPath(unitID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.ErrUnitNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var ur UnitRecord
+	if err := json.Unmarshal(b, &ur); err != nil {
+		return err
+	}
+
+	// find version
+	found := false
+	for i := range ur.Versions {
+		if ur.Versions[i].ID == versionID {
+			ur.Versions[i].ClaimSetHash = claimSetHash
+			found = true
+			break
+		}
+	}
+	if !found {
+		return domain.ErrVersionNotFound
+	}
+
+	// write claimset sidecar
+	sidecar := r.claimsetPath(unitID, versionID)
+	tmp := r.claimsetTempPath(unitID, versionID)
+	data, err := json.MarshalIndent(cs, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, sidecar); err != nil {
+		return err
+	}
+
+	// persist updated unit record
+	out, err := json.MarshalIndent(ur, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmpUnit := r.unitTempPath(ur.ID)
+	if err := ioutil.WriteFile(tmpUnit, out, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpUnit, p); err != nil {
+		return err
+	}
+	return nil
+}
+
+// LoadClaimSet loads a version-scoped claimset sidecar if present.
+func (r *UnitRepo) LoadClaimSet(unitID, versionID string) (domain.ClaimSet, bool, error) {
+	p := r.claimsetPath(unitID, versionID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.ClaimSet{}, false, nil
+	}
+	if err != nil {
+		return domain.ClaimSet{}, false, err
+	}
+	var cs domain.ClaimSet
+	if err := json.Unmarshal(b, &cs); err != nil {
+		return domain.ClaimSet{}, false, err
+	}
+	return cs, true, nil
 }
 
 // LoadMeaning loads a version-scoped meaning sidecar if present.

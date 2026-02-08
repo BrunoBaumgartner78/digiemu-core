@@ -14,6 +14,7 @@ type UnitRepo struct {
 	versionsByUnitID map[string][]domain.Version
 	versionsByID     map[string]domain.Version // v0.2.3: fast lookup
 	meanings         map[string]domain.Meaning // key: unitID.versionID
+	claimsets        map[string]domain.ClaimSet
 }
 
 func NewUnitRepo() *UnitRepo {
@@ -23,6 +24,7 @@ func NewUnitRepo() *UnitRepo {
 		versionsByUnitID: map[string][]domain.Version{},
 		versionsByID:     map[string]domain.Version{},
 		meanings:         map[string]domain.Meaning{},
+		claimsets:        map[string]domain.ClaimSet{},
 	}
 }
 
@@ -143,4 +145,41 @@ func (r *UnitRepo) LoadMeaning(unitID, versionID string) (domain.Meaning, bool, 
 	key := unitID + "." + versionID
 	m, ok := r.meanings[key]
 	return m, ok, nil
+}
+
+func (r *UnitRepo) SaveClaimSet(unitID, versionID string, claimSet domain.ClaimSet, claimSetHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// ensure version exists
+	v, ok := r.versionsByID[versionID]
+	if !ok {
+		return domain.ErrVersionNotFound
+	}
+	// update version record
+	v.ClaimSetHash = claimSetHash
+	r.versionsByID[versionID] = v
+
+	// update in versionsByUnitID slice
+	vs := r.versionsByUnitID[unitID]
+	for i := range vs {
+		if vs[i].ID == versionID {
+			vs[i].ClaimSetHash = claimSetHash
+			r.versionsByUnitID[unitID] = vs
+			break
+		}
+	}
+
+	// store claimset in memory map
+	key := unitID + "." + versionID
+	r.claimsets[key] = claimSet
+	return nil
+}
+
+func (r *UnitRepo) LoadClaimSet(unitID, versionID string) (domain.ClaimSet, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	key := unitID + "." + versionID
+	cs, ok := r.claimsets[key]
+	return cs, ok, nil
 }

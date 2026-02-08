@@ -45,3 +45,16 @@ type SetMeaningResponse struct {
 	VersionID   string
 	MeaningHash string
 }
+
+type SetClaimsRequest struct {
+	UnitKey   string
+	VersionID string
+	BodyBytes []byte
+	ActorID   string
+}
+
+type SetClaimsResponse struct {
+	UnitID       string
+	VersionID    string
+	ClaimSetHash string
+}

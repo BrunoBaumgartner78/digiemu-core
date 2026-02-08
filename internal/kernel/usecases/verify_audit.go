@@ -70,6 +70,8 @@ func (uc VerifyAudit) VerifyAudit(in ports.VerifyAuditRequest) (ports.VerifyAudi
 	foundVersionHash := make(map[string]string) // versionID -> contentHash from event
 	foundMeaningEvent := make(map[string]int)
 	foundMeaningHash := make(map[string]string)
+	foundClaimEvent := make(map[string]int)
+	foundClaimHash := make(map[string]string)
 
 	// Scan audit log
 	if err := uc.Audit.Scan(func(ev domain.AuditEvent) error {
@@ -113,6 +115,24 @@ func (uc VerifyAudit) VerifyAudit(in ports.VerifyAuditRequest) (ports.VerifyAudi
 					}
 				}
 			}
+		case "CLAIM_SET":
+			if ev.VersionID != "" {
+				if _, ok := expectedVersions[ev.VersionID]; ok {
+					foundClaimEvent[ev.VersionID]++
+					switch d := ev.Data.(type) {
+					case map[string]any:
+						if h, ok := d["claimset_hash"].(string); ok && h != "" {
+							foundClaimHash[ev.VersionID] = h
+						}
+					case domain.ClaimSetData:
+						if d.ClaimSetHash != "" {
+							foundClaimHash[ev.VersionID] = d.ClaimSetHash
+						}
+					}
+				}
+			}
+		case "CLAIM_RELATION_SET":
+			// presence is noted but handled later when claimset exists
 		}
 		return nil
 	}); err != nil {
@@ -193,6 +213,46 @@ func (uc VerifyAudit) VerifyAudit(in ports.VerifyAuditRequest) (ports.VerifyAudi
 				if err != nil || mh != v.MeaningHash {
 					out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
 						UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.MeaningHash, EventHash: mh,
+					})
+				}
+			}
+		}
+	}
+
+	// Missing, duplicate, or mismatched CLAIM_SET events when repo versions expect a claimset
+	for verID, v := range expectedVersions {
+		if v.ClaimSetHash == "" {
+			continue
+		}
+		n := foundClaimEvent[verID]
+		if n == 0 {
+			out.Missing = append(out.Missing, ports.MissingAudit{
+				UnitID: versionToUnit[verID], VersionID: verID, EventType: "CLAIM_SET",
+			})
+		} else if n > 1 {
+			out.Duplicates = append(out.Duplicates, ports.DuplicateAudit{EventType: "CLAIM_SET", TargetID: verID})
+		}
+		eh, ok := foundClaimHash[verID]
+		if !ok || eh == "" || eh != v.ClaimSetHash {
+			out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
+				UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.ClaimSetHash, EventHash: eh,
+			})
+		}
+		// If StrictHash is requested, load current claimset from repo and ensure its canonical hash matches
+		if in.StrictHash {
+			cs, ok, err := uc.Repo.LoadClaimSet(versionToUnit[verID], verID)
+			if err != nil {
+				return ports.VerifyAuditResponse{}, err
+			}
+			if !ok {
+				out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
+					UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.ClaimSetHash, EventHash: "(missing sidecar)",
+				})
+			} else {
+				ch, err := ComputeClaimSetHashFromStruct(cs)
+				if err != nil || ch != v.ClaimSetHash {
+					out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
+						UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.ClaimSetHash, EventHash: ch,
 					})
 				}
 			}

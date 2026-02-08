@@ -13,3 +13,7 @@ type CreateVersionUsecase interface {
 type SetMeaningUsecase interface {
 	SetMeaning(req SetMeaningRequest) (SetMeaningResponse, error)
 }
+
+type SetClaimsUsecase interface {
+	SetClaims(req SetClaimsRequest) (SetClaimsResponse, error)
+}

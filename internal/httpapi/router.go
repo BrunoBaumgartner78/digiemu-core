@@ -8,6 +8,8 @@ import (
 // simple router using stdlib. expects paths:
 // POST /v1/units
 // POST /v1/units/{unitId}/versions
+// PUT/GET /v1/units/{unitId}/meaning
+// PUT/GET /v1/units/{unitId}/claims
 // GET  /healthz
 func NewRouter(api API) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +48,21 @@ func NewRouter(api API) http.Handler {
 					return
 				}
 				api.handleGetMeaning(w, r, unitKey)
+				return
+			}
+		case (r.Method == http.MethodPut || r.Method == http.MethodGet) && strings.HasPrefix(p, "/v1/units/") && strings.HasSuffix(p, "/claims"):
+			parts := strings.Split(p, "/")
+			if len(parts) == 5 && parts[1] == "v1" && parts[2] == "units" && parts[4] == "claims" {
+				unitKey := parts[3]
+				if unitKey == "" {
+					http.NotFound(w, r)
+					return
+				}
+				if r.Method == http.MethodPut {
+					api.handleSetClaims(w, r, unitKey)
+					return
+				}
+				api.handleGetClaims(w, r, unitKey)
 				return
 			}
 		}

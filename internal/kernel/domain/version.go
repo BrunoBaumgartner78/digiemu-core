@@ -14,6 +14,7 @@ type Version struct {
 	CreatedAtUnix int64
 	ActorID       string
 	MeaningHash   string
+	ClaimSetHash  string
 }
 
 func NewVersion(unitID, label, content string) (Version, error) {
