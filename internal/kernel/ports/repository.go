@@ -22,4 +22,10 @@ type UnitRepository interface {
 	// FindVersionByID returns a version by its ID.
 	// ok=false if not found.
 	FindVersionByID(versionID string) (domain.Version, bool, error)
+
+	// SaveMeaning persists a meaning sidecar for a specific version and updates
+	// the version record's meaning_hash. Implementations MUST perform only
+	// persistence operations and MUST NOT emit audit events.
+	SaveMeaning(unitID, versionID string, meaning domain.Meaning, meaningHash string) error
+	LoadMeaning(unitID, versionID string) (domain.Meaning, bool, error)
 }

@@ -24,3 +24,13 @@ type VersionCreatedData struct {
 	ContentHash   string `json:"contentHash"`
 	Label         string `json:"label"`
 }
+
+type MeaningSetData struct {
+	MeaningHash   string `json:"meaning_hash"`
+	MeaningPath   string `json:"meaning_path,omitempty"`
+	SchemaVersion string `json:"schema_version,omitempty"`
+	InlinePreview *struct {
+		Title   string `json:"title,omitempty"`
+		Purpose string `json:"purpose,omitempty"`
+	} `json:"inline_preview,omitempty"`
+}

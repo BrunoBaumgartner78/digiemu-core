@@ -334,7 +334,95 @@ func (r *UnitRepo) ListVersionsByUnitID(unitID string) ([]domain.Version, error)
 			PrevVersionID: vr.PrevVersionID,
 			ContentHash:   vr.ContentHash,
 			ActorID:       vr.ActorID,
+			MeaningHash:   vr.MeaningHash,
 		})
 	}
 	return out, nil
+}
+
+// meaningPath returns the filesystem path for a unit's meaning.json file.
+func (r *UnitRepo) meaningPath(unitID, versionID string) string {
+	return filepath.Join(r.unitsDir, unitID+"."+versionID+".meaning.json")
+}
+
+func (r *UnitRepo) meaningTempPath(unitID, versionID string) string {
+	return filepath.Join(r.unitsDir, unitID+"."+versionID+".meaning.json.tmp")
+}
+
+// SaveMeaning stores a canonicalized meaning.json for the unit atomically.
+// Returns ErrUnitNotFound if the unit does not exist.
+func (r *UnitRepo) SaveMeaning(unitID, versionID string, m domain.Meaning, meaningHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p := r.unitPath(unitID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.ErrUnitNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var ur UnitRecord
+	if err := json.Unmarshal(b, &ur); err != nil {
+		return err
+	}
+
+	// find version
+	found := false
+	for i := range ur.Versions {
+		if ur.Versions[i].ID == versionID {
+			ur.Versions[i].MeaningHash = meaningHash
+			found = true
+			break
+		}
+	}
+	if !found {
+		return domain.ErrVersionNotFound
+	}
+
+	// write meaning sidecar
+	sidecar := filepath.Join(r.unitsDir, unitID+"."+versionID+".meaning.json")
+	tmp := sidecar + ".tmp"
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, sidecar); err != nil {
+		return err
+	}
+
+	// persist updated unit record
+	out, err := json.MarshalIndent(ur, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmpUnit := r.unitTempPath(ur.ID)
+	if err := ioutil.WriteFile(tmpUnit, out, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpUnit, p); err != nil {
+		return err
+	}
+	return nil
+}
+
+// LoadMeaning loads a version-scoped meaning sidecar if present.
+func (r *UnitRepo) LoadMeaning(unitID, versionID string) (domain.Meaning, bool, error) {
+	p := r.meaningPath(unitID, versionID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.Meaning{}, false, nil
+	}
+	if err != nil {
+		return domain.Meaning{}, false, err
+	}
+	var m domain.Meaning
+	if err := json.Unmarshal(b, &m); err != nil {
+		return domain.Meaning{}, false, err
+	}
+	return m, true, nil
 }

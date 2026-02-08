@@ -32,3 +32,16 @@ type CreateVersionResponse struct {
 	Label     string
 	Content   string
 }
+
+type SetMeaningRequest struct {
+	UnitKey     string
+	VersionID   string // optional; empty means use head
+	MeaningJSON []byte
+	ActorID     string
+}
+
+type SetMeaningResponse struct {
+	UnitID      string
+	VersionID   string
+	MeaningHash string
+}

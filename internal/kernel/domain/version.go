@@ -13,6 +13,7 @@ type Version struct {
 	ContentHash   string // hex sha256
 	CreatedAtUnix int64
 	ActorID       string
+	MeaningHash   string
 }
 
 func NewVersion(unitID, label, content string) (Version, error) {

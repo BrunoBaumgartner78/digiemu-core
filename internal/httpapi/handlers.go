@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -11,8 +12,10 @@ import (
 )
 
 type API struct {
-	Units ports.CreateUnitUsecase
-	Vers  ports.CreateVersionUsecase
+	Units   ports.CreateUnitUsecase
+	Vers    ports.CreateVersionUsecase
+	Meaning ports.SetMeaningUsecase
+	Repo    ports.UnitRepository
 }
 
 type createUnitReq struct {
@@ -115,4 +118,80 @@ func (a API) handleCreateVersion(w http.ResponseWriter, r *http.Request, unitKey
 
 func (a API) handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("ok"))
+}
+
+func (a API) handleSetMeaning(w http.ResponseWriter, r *http.Request, unitKey string) {
+	// optional version query param
+	version := r.URL.Query().Get("version")
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid body: %v", err)
+		return
+	}
+	in := ports.SetMeaningRequest{UnitKey: unitKey, VersionID: version, MeaningJSON: body, ActorID: "http"}
+	out, err := a.Meaning.SetMeaning(in)
+	if err != nil {
+		if err == domain.ErrUnitNotFound {
+			j.ErrorCode(w, http.StatusNotFound, "UNIT_NOT_FOUND", "unit not found", nil)
+			return
+		}
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	_ = j.Write(w, http.StatusCreated, struct {
+		UnitID      string `json:"unit_id"`
+		VersionID   string `json:"version_id"`
+		MeaningHash string `json:"meaning_hash"`
+	}{UnitID: out.UnitID, VersionID: out.VersionID, MeaningHash: out.MeaningHash})
+}
+
+func (a API) handleGetMeaning(w http.ResponseWriter, r *http.Request, unitKey string) {
+	version := r.URL.Query().Get("version")
+	// resolve unit by key or id
+	u, ok, err := a.Repo.FindUnitByKey(unitKey)
+	if err != nil {
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	if !ok {
+		u2, ok2, err2 := a.Repo.FindUnitByID(unitKey)
+		if err2 != nil {
+			j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err2)
+			return
+		}
+		if !ok2 {
+			j.ErrorCode(w, http.StatusNotFound, "UNIT_NOT_FOUND", "unit not found", nil)
+			return
+		}
+		u = u2
+	}
+	if version == "" {
+		version = u.HeadVersionID
+	}
+	if version == "" {
+		j.ErrorCode(w, http.StatusNotFound, "VERSION_NOT_FOUND", "no version specified and unit has no head", nil)
+		return
+	}
+	v, found, err := a.Repo.FindVersionByID(version)
+	if err != nil {
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	if !found {
+		j.ErrorCode(w, http.StatusNotFound, "VERSION_NOT_FOUND", "version not found", nil)
+		return
+	}
+	m, ok, err := a.Repo.LoadMeaning(u.ID, version)
+	if err != nil {
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	if !ok {
+		j.ErrorCode(w, http.StatusNotFound, "MEANING_NOT_FOUND", "meaning not found", nil)
+		return
+	}
+	_ = j.Write(w, http.StatusOK, struct {
+		Meaning     any    `json:"meaning"`
+		MeaningHash string `json:"meaning_hash"`
+	}{Meaning: m, MeaningHash: v.MeaningHash})
 }

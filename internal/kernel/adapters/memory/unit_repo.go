@@ -13,6 +13,7 @@ type UnitRepo struct {
 
 	versionsByUnitID map[string][]domain.Version
 	versionsByID     map[string]domain.Version // v0.2.3: fast lookup
+	meanings         map[string]domain.Meaning // key: unitID.versionID
 }
 
 func NewUnitRepo() *UnitRepo {
@@ -21,6 +22,7 @@ func NewUnitRepo() *UnitRepo {
 		unitsByKey:       map[string]string{},
 		versionsByUnitID: map[string][]domain.Version{},
 		versionsByID:     map[string]domain.Version{},
+		meanings:         map[string]domain.Meaning{},
 	}
 }
 
@@ -104,4 +106,41 @@ func (r *UnitRepo) UpdateUnitHead(unitID, headVersionID string) error {
 	u.HeadVersionID = headVersionID
 	r.unitsByID[unitID] = u
 	return nil
+}
+
+func (r *UnitRepo) SaveMeaning(unitID, versionID string, meaning domain.Meaning, meaningHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// ensure version exists
+	v, ok := r.versionsByID[versionID]
+	if !ok {
+		return domain.ErrVersionNotFound
+	}
+	// update version record
+	v.MeaningHash = meaningHash
+	r.versionsByID[versionID] = v
+
+	// update in versionsByUnitID slice
+	vs := r.versionsByUnitID[unitID]
+	for i := range vs {
+		if vs[i].ID == versionID {
+			vs[i].MeaningHash = meaningHash
+			r.versionsByUnitID[unitID] = vs
+			break
+		}
+	}
+
+	// store meaning in memory map
+	key := unitID + "." + versionID
+	r.meanings[key] = meaning
+	return nil
+}
+
+func (r *UnitRepo) LoadMeaning(unitID, versionID string) (domain.Meaning, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	key := unitID + "." + versionID
+	m, ok := r.meanings[key]
+	return m, ok, nil
 }

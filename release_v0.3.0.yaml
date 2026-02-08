@@ -1,0 +1,94 @@
+job:
+  id: release-v0.3.0
+  name: "Release DigiEmu Core v0.3.0 – Meaning Layer v1"
+  phase: "3.1"
+  status: ready
+  target_version: "v0.3.0"
+
+goal:
+  - Finalize Phase 3.1 (Meaning Layer v1)
+  - Prepare clean, auditable release
+  - No breaking changes
+  - Documentation + release hygiene
+
+scope:
+  included:
+    - Meaning Layer v1
+    - Version-scoped meaning sidecars
+    - Audit event MEANING_SET
+    - CLI + HTTP thin adapters
+    - Strict verify-audit support
+  excluded:
+    - New features
+    - Schema changes beyond meaning/v1
+    - Performance optimizations
+    - Access control / auth changes
+
+tasks:
+  - id: changelog
+    title: "Update CHANGELOG.md"
+    description: "Add v0.3.0 entry describing Meaning Layer v1, audit event, CLI and HTTP endpoints."
+    files:
+      - CHANGELOG.md
+    status: done
+
+  - id: release-notes
+    title: "Create RELEASE_NOTES_v0.3.0.md"
+    description: "Concise release notes describing Phase 3.1, guarantees, and compatibility."
+    files:
+      - RELEASE_NOTES_v0.3.0.md
+    status: done
+
+  - id: meaning-docs
+    title: "Finalize Meaning Layer documentation"
+    description: "Ensure README_Meaning_Layer_v1.md includes CLI examples, HTTP examples, sidecar path, and verify-audit notes."
+    files:
+      - docs/meaning/README_Meaning_Layer_v1.md
+    status: done
+
+  - id: sanity-check
+    title: "Release sanity check"
+    description: "Run formatting and full test suite."
+    commands:
+      - gofmt -w .
+      - go test ./...
+    status: done
+
+  - id: tag-release
+    title: "Tag and push release"
+    description: "Create and push annotated git tag v0.3.0 and push branch + tag."
+    commands:
+      - git status
+      - git tag -a v0.3.0 -m "DigiEmu Core v0.3.0: Meaning Layer v1"
+      - git push origin main
+      - git push origin v0.3.0
+    status: todo
+
+guarantees:
+  - no_breaking_changes: true
+  - existing_snapshots_valid: true
+  - existing_audits_valid: true
+  - meaning_optional: true
+
+artifacts:
+  - CHANGELOG.md
+  - RELEASE_NOTES_v0.3.0.md
+  - docs/meaning/README_Meaning_Layer_v1.md
+  - git_tag: v0.3.0
+
+definition_of_done:
+  - "CHANGELOG.md updated with v0.3.0"
+  - "RELEASE_NOTES_v0.3.0.md present"
+  - "Meaning Layer docs complete"
+  - "gofmt and go test clean"
+  - "Git tag v0.3.0 pushed"
+
+notes:
+  - "Phase 3.1 complete"
+  - "Foundation laid for narrative integrity and citability"
+  - "Next phase (3.2) is conceptual only, not part of this job"
+
+tagging:
+  annotated: true
+  push_branch: main
+  push_tag: v0.3.0

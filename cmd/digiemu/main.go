@@ -15,6 +15,7 @@ import (
 	"digiemu-core/internal/httpapi"
 	fsrepo "digiemu-core/internal/kernel/adapters/fs"
 	mem "digiemu-core/internal/kernel/adapters/memory"
+	"digiemu-core/internal/kernel/domain"
 	"digiemu-core/internal/kernel/ports"
 	usecases "digiemu-core/internal/kernel/usecases"
 )
@@ -26,6 +27,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "meaning":
+		runMeaning(os.Args[2:])
 	case "unit":
 		runUnit(os.Args[2:])
 	case "version":
@@ -55,6 +58,8 @@ func printUsage() {
 	fmt.Println("  digiemu audit tail [--data ./data] [--n 50] [--type EVENT_TYPE] [--unit-id UNIT_ID] [--version-id VERSION_ID] [--json]")
 	fmt.Println("  digiemu export unit --unit UNIT_KEY [--data ./data] [--audit] [--pretty]")
 	fmt.Println("  digiemu serve [--addr :8080] [--data ./data]")
+	fmt.Println("  digiemu meaning set <unitKeyOrId> [--version <versionId>] --file <meaning.json> [--data ./data]")
+	fmt.Println("  digiemu meaning show <unitKeyOrId> [--version <versionId>] [--data ./data]")
 }
 
 func runUnit(args []string) {
@@ -146,6 +151,118 @@ func runVersion(args []string) {
 
 	default:
 		fmt.Fprintln(os.Stderr, "version subcommands: create")
+		os.Exit(2)
+	}
+}
+
+func runMeaning(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "meaning subcommands: set | show")
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "set":
+		fs := flag.NewFlagSet("meaning set", flag.ExitOnError)
+		version := fs.String("version", "", "version id (optional, defaults to head)")
+		file := fs.String("file", "", "path to meaning.json")
+		data := fs.String("data", "./data", "data directory")
+		fs.Parse(args[1:])
+
+		if *file == "" {
+			fmt.Fprintln(os.Stderr, "--file is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		// positional unit key/id
+		rem := fs.Args()
+		if len(rem) == 0 {
+			fmt.Fprintln(os.Stderr, "unit key or id is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		unitKeyOrID := rem[0]
+
+		b, err := os.ReadFile(*file)
+		if err != nil {
+			log.Fatalf("read file: %v", err)
+		}
+
+		repo := fsrepo.NewUnitRepo(*data)
+		audit := fsrepo.NewAuditLog(*data)
+		clock := mem.RealClock{}
+
+		uc := usecases.SetMeaning{Repo: repo, Audit: audit, Clock: clock}
+		out, err := uc.SetMeaning(ports.SetMeaningRequest{UnitKey: unitKeyOrID, VersionID: *version, MeaningJSON: b, ActorID: "cli"})
+		if err != nil {
+			log.Fatalf("set meaning: %v", err)
+		}
+		fmt.Printf("OK: unit_id=%s version_id=%s meaning_hash=%s\n", out.UnitID, out.VersionID, out.MeaningHash)
+
+	case "show":
+		fs := flag.NewFlagSet("meaning show", flag.ExitOnError)
+		version := fs.String("version", "", "version id (optional, defaults to head)")
+		data := fs.String("data", "./data", "data directory")
+		fs.Parse(args[1:])
+
+		repo := fsrepo.NewUnitRepo(*data)
+
+		rem := fs.Args()
+		if len(rem) == 0 {
+			fmt.Fprintln(os.Stderr, "unit key or id is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		keyOrID := rem[0]
+		var unit domain.Unit
+		var ok bool
+		var errFind error
+		// try by key first
+		unit, ok, errFind = repo.FindUnitByKey(keyOrID)
+		if errFind != nil {
+			log.Fatalf("find unit: %v", errFind)
+		}
+		if !ok {
+			unit, ok, errFind = repo.FindUnitByID(keyOrID)
+			if errFind != nil {
+				log.Fatalf("find unit by id: %v", errFind)
+			}
+			if !ok {
+				log.Fatalf("unit not found: %s", keyOrID)
+			}
+		}
+
+		verID := *version
+		if verID == "" {
+			verID = unit.HeadVersionID
+		}
+		if verID == "" {
+			log.Fatalf("no version specified and unit has no head")
+		}
+
+		v, found, err := repo.FindVersionByID(verID)
+		if err != nil {
+			log.Fatalf("find version: %v", err)
+		}
+		if !found {
+			log.Fatalf("version not found: %s", verID)
+		}
+
+		m, ok, err := repo.LoadMeaning(unit.ID, verID)
+		if err != nil {
+			log.Fatalf("load meaning: %v", err)
+		}
+		if !ok {
+			log.Fatalf("meaning not found for %s %s", unit.ID, verID)
+		}
+
+		// pretty print
+		jb, _ := json.MarshalIndent(m, "", "  ")
+		fmt.Println(string(jb))
+		fmt.Printf("meaning_hash=%s\n", v.MeaningHash)
+
+	default:
+		fmt.Fprintln(os.Stderr, "meaning subcommands: set | show")
 		os.Exit(2)
 	}
 }

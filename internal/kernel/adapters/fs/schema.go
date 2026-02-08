@@ -13,6 +13,7 @@ type VersionRecord struct {
 	PrevVersionID string `json:"prev_version_id,omitempty"`
 	ContentHash   string `json:"content_hash,omitempty"`
 	ActorID       string `json:"actor_id,omitempty"`
+	MeaningHash   string `json:"meaning_hash,omitempty"`
 }
 
 type UnitRecord struct {
