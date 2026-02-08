@@ -1,0 +1,161 @@
+job:
+  id: phase-3-0-claim-minimum
+  name: "Phase 3.0 – Claim Minimum v0"
+  phase: "3"
+  status: ready
+  target_version: "v0.4.0"
+
+goal:
+  - Introduce minimal Claim model as first-class, auditable object
+  - Enable explicit contradictions (CONTRADICTS)
+  - Keep kernel deterministic, fail-closed, and additive
+  - Prepare clean foundation for Phase 3 (Widerspruch & Unsicherheit)
+
+principles:
+  - additive_only: true
+  - no_breaking_changes: true
+  - optional_everywhere: true
+  - deterministic_hashing: true
+  - audit_first: true
+  - no_ui_no_ai: true
+
+scope:
+  included:
+    - Claim object (minimal)
+    - ClaimSet per Version (optional)
+    - Claim hashing + audit events
+    - Claim relations: CONTRADICTS (v0)
+  excluded:
+    - Claim segmentation (auto)
+    - Uncertainty levels (Phase 3.1+)
+    - UI / visualization
+    - Evidence packs / KI
+    - Search / ranking
+
+definitions:
+  claim:
+    description: "Überprüfbare Aussage, unabhängig vom Meaning"
+    properties:
+      - text
+      - optional tags
+  claim_set:
+    description: "Optionale Sammlung von Claims pro Version"
+  claim_relation:
+    description: "Explizite Beziehung zwischen zwei Claims"
+    supported_types:
+      - CONTRADICTS
+
+data_model:
+  files:
+    - claim.json
+    - claimset.json
+  schema_versions:
+    claim: "claim/v0"
+    claimset: "claimset/v0"
+
+claim_schema:
+  schema_version: "claim/v0"
+  fields:
+    id: { type: string, required: true }
+    text: { type: string, required: true }
+    tags: { type: array, items: string, optional: true }
+
+claimset_schema:
+  schema_version: "claimset/v0"
+  fields:
+    version_id: { type: string, required: true }
+    claims: { type: array, items: claim }
+    relations:
+      type: array
+      optional: true
+      items:
+        type: object
+        fields:
+          type: { enum: [CONTRADICTS] }
+          from_claim_id: { type: string }
+          to_claim_id: { type: string }
+
+canonicalization:
+  format: json
+  rules:
+    - sort_object_keys: true
+    - preserve_array_order: true
+    - minified: true
+  hashing:
+    algorithm: sha256
+    input: canonical_json
+    outputs:
+      - claim_hash
+      - claimset_hash
+
+storage:
+  version_scoped: true
+  paths:
+    claimset: "data/units/<unit-id>.<version-id>.claimset.json"
+
+audit:
+  events:
+    - CLAIM_SET
+    - CLAIM_RELATION_SET
+  invariants:
+    - "If claimset exists, CLAIM_SET event must exist"
+    - "claimset_hash must match persisted file"
+    - "relations reference existing claim ids"
+
+verify_audit:
+  checks:
+    - claimset_hash_consistency
+    - audit_event_presence
+    - relation_integrity
+  strict_mode:
+    - detect tampered claimset files
+
+integration_points:
+  kernel:
+    - domain: add Claim, ClaimSet (minimal)
+    - version: optional claimset_hash
+  export:
+    - include claimset.json if present
+    - include claimset_hash in manifest
+  cli:
+    - digiemu claim set
+    - digiemu claim show
+  http_api:
+    - PUT /v1/units/{unitKey}/claims
+    - GET /v1/units/{unitKey}/claims
+
+tests:
+  unit:
+    - claim_hash_determinism
+    - claimset_hash_determinism
+    - invalid_relation_rejected
+  integration:
+    - set_claims_export_verify
+    - tamper_claimset_detected
+
+non_goals:
+  - uncertainty_levels
+  - probabilistic reasoning
+  - claim inference
+  - visualization
+  - ai orchestration
+
+deliverables:
+  - domain types: Claim, ClaimSet
+  - hashing + canonicalization helpers
+  - audit events for claims
+  - fs + memory adapters
+  - verify-audit extensions
+  - minimal CLI + HTTP adapters
+  - tests (unit + integration)
+
+definition_of_done:
+  - "Claims can be attached to a version without breaking existing flows"
+  - "Contradictions are explicit and auditable"
+  - "verify-audit detects tampering"
+  - "Exports remain reproducible"
+  - "No Phase 4 features introduced"
+
+notes:
+  - "This is the minimal viable core for Phase 3"
+  - "Uncertainty and segmentation follow in Phase 3.1+"
