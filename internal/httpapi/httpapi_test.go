@@ -11,13 +11,16 @@ import (
 	"testing"
 
 	fsrepo "digiemu-core/internal/kernel/adapters/fs"
+	mem "digiemu-core/internal/kernel/adapters/memory"
 	usecases "digiemu-core/internal/kernel/usecases"
 )
 
 func TestAPI_CreateUnit_And_Version(t *testing.T) {
 	dir := t.TempDir()
 	repo := fsrepo.NewUnitRepo(dir)
-	api := API{Units: usecases.CreateUnit{Repo: repo}, Vers: usecases.CreateVersion{Repo: repo}}
+	audit := fsrepo.NewAuditLog(dir)
+	clock := mem.RealClock{}
+	api := API{Units: usecases.CreateUnit{Repo: repo, Audit: audit, Clock: clock}, Vers: usecases.CreateVersion{Repo: repo, Audit: audit, Clock: clock}}
 	srv := httptest.NewServer(NewRouter(api))
 	defer srv.Close()
 
@@ -68,7 +71,9 @@ func TestAPI_CreateUnit_And_Version(t *testing.T) {
 func TestAPI_Version_UnknownUnit_404(t *testing.T) {
 	dir := t.TempDir()
 	repo := fsrepo.NewUnitRepo(dir)
-	api := API{Units: usecases.CreateUnit{Repo: repo}, Vers: usecases.CreateVersion{Repo: repo}}
+	audit := fsrepo.NewAuditLog(dir)
+	clock := mem.RealClock{}
+	api := API{Units: usecases.CreateUnit{Repo: repo, Audit: audit, Clock: clock}, Vers: usecases.CreateVersion{Repo: repo, Audit: audit, Clock: clock}}
 	srv := httptest.NewServer(NewRouter(api))
 	defer srv.Close()
 
@@ -86,7 +91,9 @@ func TestAPI_Version_UnknownUnit_404(t *testing.T) {
 func TestAPI_ValidationAndErrors(t *testing.T) {
 	dir := t.TempDir()
 	repo := fsrepo.NewUnitRepo(dir)
-	api := API{Units: usecases.CreateUnit{Repo: repo}, Vers: usecases.CreateVersion{Repo: repo}}
+	audit := fsrepo.NewAuditLog(dir)
+	clock := mem.RealClock{}
+	api := API{Units: usecases.CreateUnit{Repo: repo, Audit: audit, Clock: clock}, Vers: usecases.CreateVersion{Repo: repo, Audit: audit, Clock: clock}}
 	srv := httptest.NewServer(NewRouter(api))
 	defer srv.Close()
 

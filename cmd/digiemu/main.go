@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 
 	"digiemu-core/internal/httpapi"
 	fsrepo "digiemu-core/internal/kernel/adapters/fs"
+	mem "digiemu-core/internal/kernel/adapters/memory"
 	"digiemu-core/internal/kernel/ports"
 	usecases "digiemu-core/internal/kernel/usecases"
 )
@@ -28,6 +30,10 @@ func main() {
 		runUnit(os.Args[2:])
 	case "version":
 		runVersion(os.Args[2:])
+	case "audit":
+		runAudit(os.Args[2:])
+	case "export":
+		runExport(os.Args[2:])
 	case "serve":
 		runServe(os.Args[2:])
 	case "--help", "-h", "help":
@@ -43,8 +49,11 @@ func printUsage() {
 	fmt.Println("digiemu - minimal CLI for digiemu-core")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  digiemu unit create [--key KEY] --title TITLE --desc DESC|--description DESC [--data ./data]")
+	fmt.Println("  digiemu unit create [--key KEY] --title TITLE [--desc DESC|--description DESC] [--data ./data]")
 	fmt.Println("  digiemu version create --unit UNIT_KEY --content CONTENT [--data ./data]")
+	fmt.Println("  digiemu audit verify [--data ./data] [--strict-hash] [--unit UNIT_KEY]")
+	fmt.Println("  digiemu audit tail [--data ./data] [--n 50] [--type EVENT_TYPE] [--unit-id UNIT_ID] [--version-id VERSION_ID] [--json]")
+	fmt.Println("  digiemu export unit --unit UNIT_KEY [--data ./data] [--audit] [--pretty]")
 	fmt.Println("  digiemu serve [--addr :8080] [--data ./data]")
 }
 
@@ -53,6 +62,7 @@ func runUnit(args []string) {
 		fmt.Fprintln(os.Stderr, "unit subcommands: create")
 		os.Exit(2)
 	}
+
 	switch args[0] {
 	case "create":
 		fs := flag.NewFlagSet("unit create", flag.ExitOnError)
@@ -74,21 +84,24 @@ func runUnit(args []string) {
 			k = slugify(*title)
 		}
 
-		// prefer long form if present
 		d := *desc
 		if *description != "" {
 			d = *description
 		}
 
 		repo := fsrepo.NewUnitRepo(*data)
-		uc := usecases.CreateUnit{Repo: repo}
+		audit := fsrepo.NewAuditLog(*data)
+		clock := mem.RealClock{}
 
-		in := ports.CreateUnitRequest{Key: k, Title: *title, Description: d}
+		uc := usecases.CreateUnit{Repo: repo, Audit: audit, Clock: clock}
+
+		in := ports.CreateUnitRequest{Key: k, Title: *title, Description: d, ActorID: "cli"}
 		out, err := uc.CreateUnit(in)
 		if err != nil {
 			log.Fatalf("create unit: %v", err)
 		}
 		fmt.Printf("OK: unit created id=%s key=%s\n", out.UnitID, out.Key)
+
 	default:
 		fmt.Fprintln(os.Stderr, "unit subcommands: create")
 		os.Exit(2)
@@ -100,6 +113,7 @@ func runVersion(args []string) {
 		fmt.Fprintln(os.Stderr, "version subcommands: create")
 		os.Exit(2)
 	}
+
 	switch args[0] {
 	case "create":
 		fs := flag.NewFlagSet("version create", flag.ExitOnError)
@@ -115,16 +129,101 @@ func runVersion(args []string) {
 		}
 
 		repo := fsrepo.NewUnitRepo(*data)
-		vc := usecases.CreateVersion{Repo: repo}
-		label := time.Now().UTC().Format("20060102T150405Z")
-		in := ports.CreateVersionRequest{UnitKey: *unit, Label: label, Content: *content}
+		audit := fsrepo.NewAuditLog(*data)
+		clock := mem.RealClock{}
+
+		vc := usecases.CreateVersion{Repo: repo, Audit: audit, Clock: clock}
+
+		// v0.2.3+: milliseconds to reduce collisions
+		label := time.Now().UTC().Format("20060102T150405.000Z")
+
+		in := ports.CreateVersionRequest{UnitKey: *unit, Label: label, Content: *content, ActorID: "cli"}
 		out, err := vc.CreateVersion(in)
 		if err != nil {
 			log.Fatalf("create version: %v", err)
 		}
 		fmt.Printf("OK: version created id=%s unit=%s\n", out.VersionID, out.UnitID)
+
 	default:
 		fmt.Fprintln(os.Stderr, "version subcommands: create")
+		os.Exit(2)
+	}
+}
+
+func runAudit(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "audit subcommands: verify | tail")
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "verify":
+		fs := flag.NewFlagSet("audit verify", flag.ExitOnError)
+		data := fs.String("data", "./data", "data directory")
+		strictHash := fs.Bool("strict-hash", false, "verify contentHash matches audit events")
+		unitKey := fs.String("unit", "", "verify only this unit key")
+		fs.Parse(args[1:])
+
+		repo := fsrepo.NewUnitRepo(*data)
+		reader := fsrepo.NewAuditReader(*data)
+
+		uc := usecases.VerifyAudit{Repo: repo, Audit: reader}
+		out, err := uc.VerifyAudit(ports.VerifyAuditRequest{UnitKey: *unitKey, StrictHash: *strictHash})
+		if err != nil {
+			log.Fatalf("audit verify: %v", err)
+		}
+
+		if out.Ok {
+			fmt.Printf("OK: audit verified (units=%d versions=%d)\n", out.TotalUnits, out.TotalVersions)
+			return
+		}
+
+		fmt.Printf("AUDIT FINDINGS: units=%d versions=%d\n", out.TotalUnits, out.TotalVersions)
+		for _, m := range out.Missing {
+			if m.EventType == "unit.created" {
+				fmt.Printf("MISSING: %s unitId=%s\n", m.EventType, m.UnitID)
+			} else {
+				fmt.Printf("MISSING: %s unitId=%s versionId=%s\n", m.EventType, m.UnitID, m.VersionID)
+			}
+		}
+		for _, d := range out.Duplicates {
+			fmt.Printf("DUPLICATE: %s targetId=%s\n", d.EventType, d.TargetID)
+		}
+		for _, hm := range out.HashMismatches {
+			fmt.Printf("HASH MISMATCH: unitId=%s versionId=%s expected=%s event=%s\n", hm.UnitID, hm.VersionID, hm.ExpectedHash, hm.EventHash)
+		}
+		os.Exit(1)
+
+	case "tail":
+		fs := flag.NewFlagSet("audit tail", flag.ExitOnError)
+		data := fs.String("data", "./data", "data directory")
+		n := fs.Int("n", 50, "last N matching events")
+		typ := fs.String("type", "", "filter by event type (e.g. version.created)")
+		unitID := fs.String("unit-id", "", "filter by unit id")
+		versionID := fs.String("version-id", "", "filter by version id")
+		asJSON := fs.Bool("json", false, "output events as JSON (one per line)")
+		fs.Parse(args[1:])
+
+		tail := fsrepo.NewAuditTail(*data)
+		evs, err := tail.Tail(ports.AuditTailRequest{N: *n, Type: *typ, UnitID: *unitID, VersionID: *versionID})
+		if err != nil {
+			log.Fatalf("audit tail: %v", err)
+		}
+
+		for _, ev := range evs {
+			if *asJSON {
+				b, err := json.Marshal(ev)
+				if err != nil {
+					log.Fatalf("audit tail json: %v", err)
+				}
+				fmt.Println(string(b))
+				continue
+			}
+			fmt.Printf("%s at=%d actor=%s unit=%s ver=%s id=%s\n", ev.Type, ev.AtUnix, ev.ActorID, ev.UnitID, ev.VersionID, ev.ID)
+		}
+
+	default:
+		fmt.Fprintln(os.Stderr, "audit subcommands: verify | tail")
 		os.Exit(2)
 	}
 }
@@ -136,7 +235,12 @@ func runServe(args []string) {
 	fs.Parse(args)
 
 	repo := fsrepo.NewUnitRepo(*data)
-	api := httpapi.API{Units: usecases.CreateUnit{Repo: repo}, Vers: usecases.CreateVersion{Repo: repo}}
+
+	// Minimal HTTP wiring (no audit in HTTP routes here unless your httpapi already injects it)
+	api := httpapi.API{
+		Units: usecases.CreateUnit{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Vers:  usecases.CreateVersion{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+	}
 	handler := httpapi.NewRouter(api)
 
 	srv := &http.Server{
@@ -152,16 +256,13 @@ func runServe(args []string) {
 		log.Fatalf("server error: %v", err)
 	}
 
-	// on graceful shutdown (not implemented here) we'd call srv.Shutdown(ctx)
 	_ = context.Background()
 }
 
 // slugify creates a simple URL-safe key from the title
 func slugify(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
-	// replace spaces with -
 	s = strings.ReplaceAll(s, " ", "-")
-	// remove chars that are not alnum or -
 	re := regexp.MustCompile(`[^a-z0-9\-]`)
 	s = re.ReplaceAllString(s, "")
 	if len(s) < 3 {
