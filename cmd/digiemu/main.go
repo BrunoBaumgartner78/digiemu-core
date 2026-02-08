@@ -27,6 +27,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "uncertainty":
+		runUncertainty(os.Args[2:])
 	case "meaning":
 		runMeaning(os.Args[2:])
 	case "claim":
@@ -64,6 +66,8 @@ func printUsage() {
 	fmt.Println("  digiemu meaning show <unitKeyOrId> [--version <versionId>] [--data ./data]")
 	fmt.Println("  digiemu claim set <unitKeyOrId> [--version <versionId>] --file <claimset.json> [--data ./data]")
 	fmt.Println("  digiemu claim show <unitKeyOrId> [--version <versionId>] [--data ./data]")
+	fmt.Println("  digiemu uncertainty set <unitKeyOrId> [--version <versionId>] --file <uncertainty.json> [--data ./data]")
+	fmt.Println("  digiemu uncertainty show <unitKeyOrId> [--version <versionId>] [--data ./data]")
 }
 
 func runUnit(args []string) {
@@ -380,6 +384,116 @@ func runClaim(args []string) {
 	}
 }
 
+func runUncertainty(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "uncertainty subcommands: set | show")
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "set":
+		fs := flag.NewFlagSet("uncertainty set", flag.ExitOnError)
+		version := fs.String("version", "", "version id (optional, defaults to head)")
+		file := fs.String("file", "", "path to uncertainty.json")
+		data := fs.String("data", "./data", "data directory")
+		fs.Parse(args[1:])
+
+		if *file == "" {
+			fmt.Fprintln(os.Stderr, "--file is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		rem := fs.Args()
+		if len(rem) == 0 {
+			fmt.Fprintln(os.Stderr, "unit key or id is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		unitKeyOrID := rem[0]
+
+		b, err := os.ReadFile(*file)
+		if err != nil {
+			log.Fatalf("read file: %v", err)
+		}
+
+		repo := fsrepo.NewUnitRepo(*data)
+		audit := fsrepo.NewAuditLog(*data)
+		clock := mem.RealClock{}
+
+		uc := usecases.SetUncertainty{Repo: repo, Audit: audit, Clock: clock}
+		out, err := uc.SetUncertainty(ports.SetUncertaintyRequest{UnitKey: unitKeyOrID, VersionID: *version, BodyBytes: b, ActorID: "cli"})
+		if err != nil {
+			log.Fatalf("set uncertainty: %v", err)
+		}
+		fmt.Printf("OK: unit_id=%s version_id=%s uncertainty_hash=%s\n", out.UnitID, out.VersionID, out.UncertaintyHash)
+
+	case "show":
+		fs := flag.NewFlagSet("uncertainty show", flag.ExitOnError)
+		version := fs.String("version", "", "version id (optional, defaults to head)")
+		data := fs.String("data", "./data", "data directory")
+		fs.Parse(args[1:])
+
+		repo := fsrepo.NewUnitRepo(*data)
+
+		rem := fs.Args()
+		if len(rem) == 0 {
+			fmt.Fprintln(os.Stderr, "unit key or id is required")
+			fs.Usage()
+			os.Exit(2)
+		}
+		keyOrID := rem[0]
+		var unit domain.Unit
+		var ok bool
+		var errFind error
+		unit, ok, errFind = repo.FindUnitByKey(keyOrID)
+		if errFind != nil {
+			log.Fatalf("find unit: %v", errFind)
+		}
+		if !ok {
+			unit, ok, errFind = repo.FindUnitByID(keyOrID)
+			if errFind != nil {
+				log.Fatalf("find unit by id: %v", errFind)
+			}
+			if !ok {
+				log.Fatalf("unit not found: %s", keyOrID)
+			}
+		}
+
+		verID := *version
+		if verID == "" {
+			verID = unit.HeadVersionID
+		}
+		if verID == "" {
+			log.Fatalf("no version specified and unit has no head")
+		}
+
+		v, found, err := repo.FindVersionByID(verID)
+		if err != nil {
+			log.Fatalf("find version: %v", err)
+		}
+		if !found {
+			log.Fatalf("version not found: %s", verID)
+		}
+
+		u, ok, err := repo.LoadUncertainty(unit.ID, verID)
+		if err != nil {
+			log.Fatalf("load uncertainty: %v", err)
+		}
+		if !ok {
+			fmt.Fprintln(os.Stderr, "no uncertainty for this version")
+			os.Exit(2)
+		}
+
+		jb, _ := json.MarshalIndent(u, "", "  ")
+		fmt.Println(string(jb))
+		fmt.Printf("uncertainty_hash=%s\n", v.UncertaintyHash)
+
+	default:
+		fmt.Fprintln(os.Stderr, "uncertainty subcommands: set | show")
+		os.Exit(2)
+	}
+}
+
 func runAudit(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "audit subcommands: verify | tail")
@@ -468,11 +582,12 @@ func runServe(args []string) {
 
 	// Minimal HTTP wiring (no audit in HTTP routes here unless your httpapi already injects it)
 	api := httpapi.API{
-		Units:   usecases.CreateUnit{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
-		Vers:    usecases.CreateVersion{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
-		Meaning: usecases.SetMeaning{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
-		Claims:  usecases.SetClaims{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
-		Repo:    repo,
+		Units:       usecases.CreateUnit{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Vers:        usecases.CreateVersion{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Meaning:     usecases.SetMeaning{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Claims:      usecases.SetClaims{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Uncertainty: usecases.SetUncertainty{Repo: repo, Audit: fsrepo.NewAuditLog(*data), Clock: mem.RealClock{}},
+		Repo:        repo,
 	}
 	handler := httpapi.NewRouter(api)
 

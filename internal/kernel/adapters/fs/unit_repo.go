@@ -358,6 +358,14 @@ func (r *UnitRepo) claimsetTempPath(unitID, versionID string) string {
 	return filepath.Join(r.unitsDir, unitID+"."+versionID+".claimset.json.tmp")
 }
 
+func (r *UnitRepo) uncertaintyPath(unitID, versionID string) string {
+	return filepath.Join(r.unitsDir, unitID+"."+versionID+".uncertainty.json")
+}
+
+func (r *UnitRepo) uncertaintyTempPath(unitID, versionID string) string {
+	return filepath.Join(r.unitsDir, unitID+"."+versionID+".uncertainty.json.tmp")
+}
+
 // SaveMeaning stores a canonicalized meaning.json for the unit atomically.
 // Returns ErrUnitNotFound if the unit does not exist.
 func (r *UnitRepo) SaveMeaning(unitID, versionID string, m domain.Meaning, meaningHash string) error {
@@ -496,6 +504,84 @@ func (r *UnitRepo) LoadClaimSet(unitID, versionID string) (domain.ClaimSet, bool
 		return domain.ClaimSet{}, false, err
 	}
 	return cs, true, nil
+}
+
+// SaveUncertainty stores a canonicalized uncertainty sidecar for the unit atomically
+// and updates the embedded version record's uncertainty_hash. Returns ErrUnitNotFound
+// or ErrVersionNotFound where applicable.
+func (r *UnitRepo) SaveUncertainty(unitID, versionID string, u domain.Uncertainty, uncertaintyHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p := r.unitPath(unitID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.ErrUnitNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var ur UnitRecord
+	if err := json.Unmarshal(b, &ur); err != nil {
+		return err
+	}
+
+	// find version
+	found := false
+	for i := range ur.Versions {
+		if ur.Versions[i].ID == versionID {
+			ur.Versions[i].UncertaintyHash = uncertaintyHash
+			found = true
+			break
+		}
+	}
+	if !found {
+		return domain.ErrVersionNotFound
+	}
+
+	sidecar := r.uncertaintyPath(unitID, versionID)
+	tmp := r.uncertaintyTempPath(unitID, versionID)
+	data, err := json.MarshalIndent(u, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, sidecar); err != nil {
+		return err
+	}
+
+	// persist updated unit record
+	out, err := json.MarshalIndent(ur, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmpUnit := r.unitTempPath(ur.ID)
+	if err := ioutil.WriteFile(tmpUnit, out, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpUnit, p); err != nil {
+		return err
+	}
+	return nil
+}
+
+// LoadUncertainty loads a version-scoped uncertainty sidecar if present.
+func (r *UnitRepo) LoadUncertainty(unitID, versionID string) (domain.Uncertainty, bool, error) {
+	p := r.uncertaintyPath(unitID, versionID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.Uncertainty{}, false, nil
+	}
+	if err != nil {
+		return domain.Uncertainty{}, false, err
+	}
+	var u domain.Uncertainty
+	if err := json.Unmarshal(b, &u); err != nil {
+		return domain.Uncertainty{}, false, err
+	}
+	return u, true, nil
 }
 
 // LoadMeaning loads a version-scoped meaning sidecar if present.

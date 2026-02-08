@@ -17,3 +17,7 @@ type SetMeaningUsecase interface {
 type SetClaimsUsecase interface {
 	SetClaims(req SetClaimsRequest) (SetClaimsResponse, error)
 }
+
+type SetUncertaintyUsecase interface {
+	SetUncertainty(req SetUncertaintyRequest) (SetUncertaintyResponse, error)
+}

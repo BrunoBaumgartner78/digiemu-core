@@ -12,11 +12,12 @@ import (
 )
 
 type API struct {
-	Units   ports.CreateUnitUsecase
-	Vers    ports.CreateVersionUsecase
-	Meaning ports.SetMeaningUsecase
-	Claims  ports.SetClaimsUsecase
-	Repo    ports.UnitRepository
+	Units       ports.CreateUnitUsecase
+	Vers        ports.CreateVersionUsecase
+	Meaning     ports.SetMeaningUsecase
+	Claims      ports.SetClaimsUsecase
+	Uncertainty ports.SetUncertaintyUsecase
+	Repo        ports.UnitRepository
 }
 
 type createUnitReq struct {
@@ -219,6 +220,80 @@ func (a API) handleGetClaims(w http.ResponseWriter, r *http.Request, unitKey str
 		ClaimSet     any    `json:"claimset"`
 		ClaimSetHash string `json:"claimset_hash"`
 	}{ClaimSet: cs, ClaimSetHash: v.ClaimSetHash})
+}
+
+func (a API) handleSetUncertainty(w http.ResponseWriter, r *http.Request, unitKey string) {
+	version := r.URL.Query().Get("version")
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		j.Errorf(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid body: %v", err)
+		return
+	}
+	in := ports.SetUncertaintyRequest{UnitKey: unitKey, VersionID: version, BodyBytes: body, ActorID: "http"}
+	out, err := a.Uncertainty.SetUncertainty(in)
+	if err != nil {
+		if err == domain.ErrUnitNotFound {
+			j.ErrorCode(w, http.StatusNotFound, "UNIT_NOT_FOUND", "unit not found", nil)
+			return
+		}
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	_ = j.Write(w, http.StatusCreated, struct {
+		UnitID          string `json:"unit_id"`
+		VersionID       string `json:"version_id"`
+		UncertaintyHash string `json:"uncertainty_hash"`
+	}{UnitID: out.UnitID, VersionID: out.VersionID, UncertaintyHash: out.UncertaintyHash})
+}
+
+func (a API) handleGetUncertainty(w http.ResponseWriter, r *http.Request, unitKey string) {
+	version := r.URL.Query().Get("version")
+	u, ok, err := a.Repo.FindUnitByKey(unitKey)
+	if err != nil {
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	if !ok {
+		u2, ok2, err2 := a.Repo.FindUnitByID(unitKey)
+		if err2 != nil {
+			j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err2)
+			return
+		}
+		if !ok2 {
+			j.ErrorCode(w, http.StatusNotFound, "UNIT_NOT_FOUND", "unit not found", nil)
+			return
+		}
+		u = u2
+	}
+	if version == "" {
+		version = u.HeadVersionID
+	}
+	if version == "" {
+		j.ErrorCode(w, http.StatusNotFound, "VERSION_NOT_FOUND", "no version specified and unit has no head", nil)
+		return
+	}
+	v, found, err := a.Repo.FindVersionByID(version)
+	if err != nil {
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	if !found {
+		j.ErrorCode(w, http.StatusNotFound, "VERSION_NOT_FOUND", "version not found", nil)
+		return
+	}
+	us, ok, err := a.Repo.LoadUncertainty(u.ID, version)
+	if err != nil {
+		j.Errorf(w, http.StatusInternalServerError, "INTERNAL", "%v", err)
+		return
+	}
+	if !ok {
+		j.ErrorCode(w, http.StatusNotFound, "UNCERTAINTY_NOT_FOUND", "uncertainty not found", nil)
+		return
+	}
+	_ = j.Write(w, http.StatusOK, struct {
+		Uncertainty     any    `json:"uncertainty"`
+		UncertaintyHash string `json:"uncertainty_hash"`
+	}{Uncertainty: us, UncertaintyHash: v.UncertaintyHash})
 }
 
 func (a API) handleGetMeaning(w http.ResponseWriter, r *http.Request, unitKey string) {

@@ -49,3 +49,10 @@ type ClaimRelationSetData struct {
 	FromClaimID string `json:"from_claim_id"`
 	ToClaimID   string `json:"to_claim_id"`
 }
+
+type UncertaintySetData struct {
+	UnitID          string `json:"unit_id,omitempty"`
+	VersionID       string `json:"version_id,omitempty"`
+	UncertaintyHash string `json:"uncertainty_hash"`
+	UncertaintyPath string `json:"uncertainty_path,omitempty"`
+}

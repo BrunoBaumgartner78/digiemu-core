@@ -10,11 +10,12 @@ type VersionRecord struct {
 	CreatedAt string `json:"created_at"`
 
 	// v0.2
-	PrevVersionID string `json:"prev_version_id,omitempty"`
-	ContentHash   string `json:"content_hash,omitempty"`
-	ActorID       string `json:"actor_id,omitempty"`
-	MeaningHash   string `json:"meaning_hash,omitempty"`
-	ClaimSetHash  string `json:"claimset_hash,omitempty"`
+	PrevVersionID   string `json:"prev_version_id,omitempty"`
+	ContentHash     string `json:"content_hash,omitempty"`
+	ActorID         string `json:"actor_id,omitempty"`
+	MeaningHash     string `json:"meaning_hash,omitempty"`
+	ClaimSetHash    string `json:"claimset_hash,omitempty"`
+	UncertaintyHash string `json:"uncertainty_hash,omitempty"`
 }
 
 type UnitRecord struct {

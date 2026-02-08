@@ -33,4 +33,9 @@ type UnitRepository interface {
 	// data and MUST NOT emit audit events.
 	SaveClaimSet(unitID, versionID string, claimSet domain.ClaimSet, claimSetHash string) error
 	LoadClaimSet(unitID, versionID string) (domain.ClaimSet, bool, error)
+
+	// Uncertainty persistence (version-scoped). Implementations MUST only persist
+	// data and MUST NOT emit audit events.
+	SaveUncertainty(unitID, versionID string, u domain.Uncertainty, uncertaintyHash string) error
+	LoadUncertainty(unitID, versionID string) (domain.Uncertainty, bool, error)
 }

@@ -9,12 +9,13 @@ type Version struct {
 	Content string
 
 	// v0.2: lineage + auditability + integrity
-	PrevVersionID string
-	ContentHash   string // hex sha256
-	CreatedAtUnix int64
-	ActorID       string
-	MeaningHash   string
-	ClaimSetHash  string
+	PrevVersionID   string
+	ContentHash     string // hex sha256
+	CreatedAtUnix   int64
+	ActorID         string
+	MeaningHash     string
+	ClaimSetHash    string
+	UncertaintyHash string
 }
 
 func NewVersion(unitID, label, content string) (Version, error) {

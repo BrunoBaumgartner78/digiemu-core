@@ -15,6 +15,7 @@ type UnitRepo struct {
 	versionsByID     map[string]domain.Version // v0.2.3: fast lookup
 	meanings         map[string]domain.Meaning // key: unitID.versionID
 	claimsets        map[string]domain.ClaimSet
+	uncertainties    map[string]domain.Uncertainty
 }
 
 func NewUnitRepo() *UnitRepo {
@@ -25,6 +26,7 @@ func NewUnitRepo() *UnitRepo {
 		versionsByID:     map[string]domain.Version{},
 		meanings:         map[string]domain.Meaning{},
 		claimsets:        map[string]domain.ClaimSet{},
+		uncertainties:    map[string]domain.Uncertainty{},
 	}
 }
 
@@ -174,6 +176,43 @@ func (r *UnitRepo) SaveClaimSet(unitID, versionID string, claimSet domain.ClaimS
 	key := unitID + "." + versionID
 	r.claimsets[key] = claimSet
 	return nil
+}
+
+func (r *UnitRepo) SaveUncertainty(unitID, versionID string, u domain.Uncertainty, uncertaintyHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// ensure version exists
+	v, ok := r.versionsByID[versionID]
+	if !ok {
+		return domain.ErrVersionNotFound
+	}
+	// update version record
+	v.UncertaintyHash = uncertaintyHash
+	r.versionsByID[versionID] = v
+
+	// update in versionsByUnitID slice
+	vs := r.versionsByUnitID[unitID]
+	for i := range vs {
+		if vs[i].ID == versionID {
+			vs[i].UncertaintyHash = uncertaintyHash
+			r.versionsByUnitID[unitID] = vs
+			break
+		}
+	}
+
+	// store uncertainty in memory map
+	key := unitID + "." + versionID
+	r.uncertainties[key] = u
+	return nil
+}
+
+func (r *UnitRepo) LoadUncertainty(unitID, versionID string) (domain.Uncertainty, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	key := unitID + "." + versionID
+	u, ok := r.uncertainties[key]
+	return u, ok, nil
 }
 
 func (r *UnitRepo) LoadClaimSet(unitID, versionID string) (domain.ClaimSet, bool, error) {

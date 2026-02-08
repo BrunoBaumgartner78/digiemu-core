@@ -72,6 +72,8 @@ func (uc VerifyAudit) VerifyAudit(in ports.VerifyAuditRequest) (ports.VerifyAudi
 	foundMeaningHash := make(map[string]string)
 	foundClaimEvent := make(map[string]int)
 	foundClaimHash := make(map[string]string)
+	foundUncertaintyEvent := make(map[string]int)
+	foundUncertaintyHash := make(map[string]string)
 
 	// Scan audit log
 	if err := uc.Audit.Scan(func(ev domain.AuditEvent) error {
@@ -133,6 +135,22 @@ func (uc VerifyAudit) VerifyAudit(in ports.VerifyAuditRequest) (ports.VerifyAudi
 			}
 		case "CLAIM_RELATION_SET":
 			// presence is noted but handled later when claimset exists
+		case "UNCERTAINTY_SET":
+			if ev.VersionID != "" {
+				if _, ok := expectedVersions[ev.VersionID]; ok {
+					foundUncertaintyEvent[ev.VersionID]++
+					switch d := ev.Data.(type) {
+					case map[string]any:
+						if h, ok := d["uncertainty_hash"].(string); ok && h != "" {
+							foundUncertaintyHash[ev.VersionID] = h
+						}
+					case domain.UncertaintySetData:
+						if d.UncertaintyHash != "" {
+							foundUncertaintyHash[ev.VersionID] = d.UncertaintyHash
+						}
+					}
+				}
+			}
 		}
 		return nil
 	}); err != nil {
@@ -253,6 +271,45 @@ func (uc VerifyAudit) VerifyAudit(in ports.VerifyAuditRequest) (ports.VerifyAudi
 				if err != nil || ch != v.ClaimSetHash {
 					out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
 						UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.ClaimSetHash, EventHash: ch,
+					})
+				}
+			}
+		}
+	}
+
+	// Missing, duplicate, or mismatched UNCERTAINTY_SET events when repo versions expect an uncertainty
+	for verID, v := range expectedVersions {
+		if v.UncertaintyHash == "" {
+			continue
+		}
+		n := foundUncertaintyEvent[verID]
+		if n == 0 {
+			out.Missing = append(out.Missing, ports.MissingAudit{
+				UnitID: versionToUnit[verID], VersionID: verID, EventType: "UNCERTAINTY_SET",
+			})
+		} else if n > 1 {
+			out.Duplicates = append(out.Duplicates, ports.DuplicateAudit{EventType: "UNCERTAINTY_SET", TargetID: verID})
+		}
+		eh, ok := foundUncertaintyHash[verID]
+		if !ok || eh == "" || eh != v.UncertaintyHash {
+			out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
+				UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.UncertaintyHash, EventHash: eh,
+			})
+		}
+		if in.StrictHash {
+			u, ok, err := uc.Repo.LoadUncertainty(versionToUnit[verID], verID)
+			if err != nil {
+				return ports.VerifyAuditResponse{}, err
+			}
+			if !ok {
+				out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
+					UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.UncertaintyHash, EventHash: "(missing sidecar)",
+				})
+			} else {
+				uHash, err := ComputeUncertaintyHashFromStruct(u)
+				if err != nil || uHash != v.UncertaintyHash {
+					out.HashMismatches = append(out.HashMismatches, ports.HashMismatch{
+						UnitID: versionToUnit[verID], VersionID: verID, ExpectedHash: v.UncertaintyHash, EventHash: uHash,
 					})
 				}
 			}

@@ -58,3 +58,16 @@ type SetClaimsResponse struct {
 	VersionID    string
 	ClaimSetHash string
 }
+
+type SetUncertaintyRequest struct {
+	UnitKey   string
+	VersionID string
+	BodyBytes []byte
+	ActorID   string
+}
+
+type SetUncertaintyResponse struct {
+	UnitID          string
+	VersionID       string
+	UncertaintyHash string
+}
