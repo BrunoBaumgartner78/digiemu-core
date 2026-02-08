@@ -7,6 +7,12 @@ type Version struct {
 	UnitID  string
 	Label   string
 	Content string
+
+	// v0.2: lineage + auditability + integrity
+	PrevVersionID string
+	ContentHash   string // hex sha256
+	CreatedAtUnix int64
+	ActorID       string
 }
 
 func NewVersion(unitID, label, content string) (Version, error) {

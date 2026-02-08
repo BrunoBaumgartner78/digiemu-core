@@ -14,7 +14,7 @@ func TestFSRepo_CreateUnit_SaveLoad_AddVersion(t *testing.T) {
 	dir := t.TempDir()
 	repo := fsrepo.NewUnitRepo(dir)
 
-	u, err := domain.NewUnit("u-key", "Unit Title")
+	u, err := domain.NewUnit("u-key", "Unit Title", "")
 	if err != nil {
 		t.Fatalf("new unit err: %v", err)
 	}

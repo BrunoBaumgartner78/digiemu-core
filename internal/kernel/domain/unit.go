@@ -7,6 +7,9 @@ type Unit struct {
 	Key         string
 	Title       string
 	Description string
+
+	// v0.2: tracks current "head" version for optimistic locking and lineage
+	HeadVersionID string
 }
 
 func NewUnit(key, title, description string) (Unit, error) {
@@ -22,9 +25,10 @@ func NewUnit(key, title, description string) (Unit, error) {
 	}
 
 	return Unit{
-		ID:          NewID("unit"),
-		Key:         key,
-		Title:       title,
-		Description: description,
+		ID:            NewID("unit"),
+		Key:           key,
+		Title:         title,
+		Description:   description,
+		HeadVersionID: "",
 	}, nil
 }

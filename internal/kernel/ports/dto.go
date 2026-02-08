@@ -7,6 +7,7 @@ type CreateUnitRequest struct {
 	Key         string
 	Title       string
 	Description string
+	ActorID     string // v0.2: strict audit
 }
 
 type CreateUnitResponse struct {
@@ -20,6 +21,9 @@ type CreateVersionRequest struct {
 	UnitKey string
 	Label   string
 	Content string
+	// v0.2
+	BaseVersionID string // optional optimistic locking; "" = no check
+	ActorID       string // strict audit
 }
 
 type CreateVersionResponse struct {
