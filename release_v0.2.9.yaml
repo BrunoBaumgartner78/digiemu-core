@@ -1,0 +1,29 @@
+version: v0.2.9
+commit: 8893971
+date: 2026-02-08
+
+features:
+  - deterministic_snapshot_hash
+  - audit_hash_export
+  - filesystem_auditlog
+  - memory_auditlog
+  - hardened_fs_index
+  - kernel_ports_refactor
+
+breaking_changes:
+  - removed_ports_repositories_go
+
+components:
+  kernel: updated
+  ports: refactored
+  usecases: expanded
+  adapters:
+    fs: updated
+    memory: updated
+  cli: updated
+  httpapi: updated
+
+verification:
+  tests: pass
+  cli_export: pass
+  audit_verify: pass

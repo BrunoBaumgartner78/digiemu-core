@@ -13,4 +13,12 @@
 - HTTP API with consistent error format
 - CLI (cmd/digiemu) + HTTP API cmd (cmd/api)
 - CI workflow (gofmt check + go test)
+ 
+## v0.2.9 — Audit & Snapshot Stabilization Release
+
+- Deterministic Snapshot Hashing: `snapshotHash` included in export; `auditHash` when `--audit`.
+- Hardened audit + snapshot pipeline across kernel, FS and memory adapters.
+- Added export CLI command and verified audit verification tooling.
+
+See RELEASE_NOTES_v0.2.9.md for full details.
 
