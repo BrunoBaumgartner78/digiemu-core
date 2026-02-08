@@ -14,12 +14,18 @@ type UnitRepo struct {
 	basePath string
 	unitsDir string
 	mu       sync.RWMutex
+
+	// v0.2.7: persistent index (key -> unitID)
+	index *indexStore
 }
 
 func NewUnitRepo(basePath string) *UnitRepo {
 	units := filepath.Join(basePath, "units")
 	_ = os.MkdirAll(units, 0o755)
-	return &UnitRepo{basePath: basePath, unitsDir: units}
+
+	r := &UnitRepo{basePath: basePath, unitsDir: units}
+	r.index = newIndexStore(basePath)
+	return r
 }
 
 func (r *UnitRepo) unitPath(id string) string {
@@ -31,9 +37,22 @@ func (r *UnitRepo) unitTempPath(id string) string {
 }
 
 func (r *UnitRepo) ExistsByKey(key string) (bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	// ensure index is loaded (or rebuilt) best-effort
+	if r.index != nil {
+		_ = r.index.ensureLoaded(func() error {
+			m, err := rebuildUnitsByKey(r.basePath)
+			if err != nil {
+				return err
+			}
+			return r.index.saveUnitsByKeyAtomic(m)
+		})
+		_, ok := r.index.getUnitIDByKey(key)
+		if ok {
+			return true, nil
+		}
+	}
 
+	// fallback: scan directory for unit with matching key
 	files, err := ioutil.ReadDir(r.unitsDir)
 	if err != nil {
 		return false, err
@@ -62,12 +81,13 @@ func (r *UnitRepo) SaveUnit(u domain.Unit) error {
 	defer r.mu.Unlock()
 
 	ur := UnitRecord{
-		ID:          u.ID,
-		Key:         u.Key,
-		Title:       u.Title,
-		Description: u.Description,
-		CreatedAt:   nowRFC3339(),
-		Versions:    []VersionRecord{},
+		ID:            u.ID,
+		Key:           u.Key,
+		Title:         u.Title,
+		Description:   u.Description,
+		CreatedAt:     nowRFC3339(),
+		HeadVersionID: u.HeadVersionID,
+		Versions:      []VersionRecord{},
 	}
 
 	data, err := json.MarshalIndent(ur, "", "  ")
@@ -79,13 +99,36 @@ func (r *UnitRepo) SaveUnit(u domain.Unit) error {
 	if err := ioutil.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, r.unitPath(u.ID))
+	if err := os.Rename(tmp, r.unitPath(u.ID)); err != nil {
+		return err
+	}
+
+	// update index best-effort
+	if r.index != nil {
+		r.index.upsertUnitKey(u.Key, u.ID)
+	}
+	return nil
 }
 
 func (r *UnitRepo) FindUnitByKey(key string) (domain.Unit, bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	// ensure index is loaded (or rebuilt) best-effort
+	if r.index != nil {
+		_ = r.index.ensureLoaded(func() error {
+			m, err := rebuildUnitsByKey(r.basePath)
+			if err != nil {
+				return err
+			}
+			return r.index.saveUnitsByKeyAtomic(m)
+		})
+		if id, ok := r.index.getUnitIDByKey(key); ok {
+			if id != "" {
+				return r.FindUnitByID(id)
+			}
+			// treat empty id as not found and fallthrough to scan
+		}
+	}
 
+	// fallback: scan directory for unit with matching key
 	files, err := ioutil.ReadDir(r.unitsDir)
 	if err != nil {
 		return domain.Unit{}, false, err
@@ -104,16 +147,19 @@ func (r *UnitRepo) FindUnitByKey(key string) (domain.Unit, bool, error) {
 			return domain.Unit{}, false, err
 		}
 		if ur.Key == key {
-			return domain.Unit{ID: ur.ID, Key: ur.Key, Title: ur.Title, Description: ur.Description}, true, nil
+			return domain.Unit{
+				ID:            ur.ID,
+				Key:           ur.Key,
+				Title:         ur.Title,
+				Description:   ur.Description,
+				HeadVersionID: ur.HeadVersionID,
+			}, true, nil
 		}
 	}
 	return domain.Unit{}, false, nil
 }
 
 func (r *UnitRepo) FindUnitByID(id string) (domain.Unit, bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	p := r.unitPath(id)
 	b, err := ioutil.ReadFile(p)
 	if os.IsNotExist(err) {
@@ -126,14 +172,73 @@ func (r *UnitRepo) FindUnitByID(id string) (domain.Unit, bool, error) {
 	if err := json.Unmarshal(b, &ur); err != nil {
 		return domain.Unit{}, false, err
 	}
-	return domain.Unit{ID: ur.ID, Key: ur.Key, Title: ur.Title, Description: ur.Description}, true, nil
+	return domain.Unit{
+		ID:            ur.ID,
+		Key:           ur.Key,
+		Title:         ur.Title,
+		Description:   ur.Description,
+		HeadVersionID: ur.HeadVersionID,
+	}, true, nil
+}
+
+func (r *UnitRepo) ListUnits() ([]domain.Unit, error) {
+	// ensure index is loaded (or rebuilt) best-effort
+	if r.index != nil {
+		_ = r.index.ensureLoaded(func() error {
+			m, err := rebuildUnitsByKey(r.basePath)
+			if err != nil {
+				return err
+			}
+			return r.index.saveUnitsByKeyAtomic(m)
+		})
+		ids := r.index.listUnitIDs()
+		out := make([]domain.Unit, 0, len(ids))
+		for _, id := range ids {
+			u, ok, err := r.FindUnitByID(id)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+			out = append(out, u)
+		}
+		return out, nil
+	}
+
+	files, err := ioutil.ReadDir(r.unitsDir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Unit, 0, len(files))
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		p := filepath.Join(r.unitsDir, f.Name())
+		b, err := ioutil.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		var ur UnitRecord
+		if err := json.Unmarshal(b, &ur); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.Unit{
+			ID:            ur.ID,
+			Key:           ur.Key,
+			Title:         ur.Title,
+			Description:   ur.Description,
+			HeadVersionID: ur.HeadVersionID,
+		})
+	}
+	return out, nil
 }
 
 func (r *UnitRepo) SaveVersion(v domain.Version) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// load unit record
 	p := r.unitPath(v.UnitID)
 	b, err := ioutil.ReadFile(p)
 	if os.IsNotExist(err) {
@@ -148,11 +253,15 @@ func (r *UnitRepo) SaveVersion(v domain.Version) error {
 	}
 
 	vr := VersionRecord{
-		ID:        v.ID,
-		Label:     v.Label,
-		Content:   v.Content,
-		CreatedAt: nowRFC3339(),
+		ID:            v.ID,
+		Label:         v.Label,
+		Content:       v.Content,
+		CreatedAt:     nowRFC3339(),
+		PrevVersionID: v.PrevVersionID,
+		ContentHash:   v.ContentHash,
+		ActorID:       v.ActorID,
 	}
+
 	ur.Versions = append(ur.Versions, vr)
 
 	data, err := json.MarshalIndent(ur, "", "  ")
@@ -163,13 +272,46 @@ func (r *UnitRepo) SaveVersion(v domain.Version) error {
 	if err := ioutil.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, p)
+	if err := os.Rename(tmp, p); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *UnitRepo) UpdateUnitHead(unitID, headVersionID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p := r.unitPath(unitID)
+	b, err := ioutil.ReadFile(p)
+	if os.IsNotExist(err) {
+		return domain.ErrUnitNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var ur UnitRecord
+	if err := json.Unmarshal(b, &ur); err != nil {
+		return err
+	}
+
+	ur.HeadVersionID = headVersionID
+
+	data, err := json.MarshalIndent(ur, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := r.unitTempPath(ur.ID)
+	if err := ioutil.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, p); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *UnitRepo) ListVersionsByUnitID(unitID string) ([]domain.Version, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	p := r.unitPath(unitID)
 	b, err := ioutil.ReadFile(p)
 	if os.IsNotExist(err) {
@@ -184,14 +326,15 @@ func (r *UnitRepo) ListVersionsByUnitID(unitID string) ([]domain.Version, error)
 	}
 	out := make([]domain.Version, 0, len(ur.Versions))
 	for _, vr := range ur.Versions {
-		out = append(out, domain.Version{ID: vr.ID, UnitID: unitID, Label: vr.Label, Content: vr.Content})
+		out = append(out, domain.Version{
+			ID:            vr.ID,
+			UnitID:        unitID,
+			Label:         vr.Label,
+			Content:       vr.Content,
+			PrevVersionID: vr.PrevVersionID,
+			ContentHash:   vr.ContentHash,
+			ActorID:       vr.ActorID,
+		})
 	}
 	return out, nil
 }
-
-// helper: ensure repo implements interface at compile time
-var _ = func() interface{} {
-	var _r interface{} = (*UnitRepo)(nil)
-	_ = _r
-	return nil
-}()
