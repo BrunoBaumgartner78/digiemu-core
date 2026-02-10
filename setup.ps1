@@ -194,7 +194,7 @@ type CreateUnit struct {
 }
 
 func (uc CreateUnit) Execute(in CreateUnitInput) (CreateUnitOutput, error) {
-	u, err := domain.NewUnit(in.Key, in.Title)
+	u, err := domain.NewUnit(in.Key, in.Title, "")
 	if err != nil {
 		return CreateUnitOutput{}, err
 	}

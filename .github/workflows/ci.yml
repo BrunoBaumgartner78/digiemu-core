@@ -18,8 +18,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ${{ github.workspace }}/go.mod
+          go-version-file: go.mod
           cache: true
+          cache-dependency-path: go.sum
+
+      - name: go mod tidy (check)
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
 
       - name: Go fmt (check)
         run: |

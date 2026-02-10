@@ -24,7 +24,7 @@ func TestUncertainty_Tamper_FS(t *testing.T) {
 	clock := memory.RealClock{}
 
 	cu := usecases.CreateUnit{Repo: repo, Audit: audit, Clock: clock}
-	_, err = cu.CreateUnit(ports.CreateUnitRequest{Key: "kfs", Title: "t", Description: "d", ActorID: "test"})
+	outU, err := cu.CreateUnit(ports.CreateUnitRequest{Key: "kfs", Title: "tfs", Description: "d", ActorID: "test"})
 	if err != nil {
 		t.Fatalf("create unit: %v", err)
 	}
@@ -41,8 +41,8 @@ func TestUncertainty_Tamper_FS(t *testing.T) {
 		t.Fatalf("set uncertainty: %v", err)
 	}
 
-	// tamper the sidecar
-	side := filepath.Join(dir, "units", "unit_kfs."+outV.VersionID+".uncertainty.json")
+	// tamper the sidecar (use actual unit ID)
+	side := filepath.Join(dir, "units", outU.UnitID+"."+outV.VersionID+".uncertainty.json")
 	if err := ioutil.WriteFile(side, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("tamper write: %v", err)
 	}
