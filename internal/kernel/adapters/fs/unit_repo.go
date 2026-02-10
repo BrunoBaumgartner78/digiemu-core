@@ -327,15 +327,16 @@ func (r *UnitRepo) ListVersionsByUnitID(unitID string) ([]domain.Version, error)
 	out := make([]domain.Version, 0, len(ur.Versions))
 	for _, vr := range ur.Versions {
 		out = append(out, domain.Version{
-			ID:            vr.ID,
-			UnitID:        unitID,
-			Label:         vr.Label,
-			Content:       vr.Content,
-			PrevVersionID: vr.PrevVersionID,
-			ContentHash:   vr.ContentHash,
-			ActorID:       vr.ActorID,
-			MeaningHash:   vr.MeaningHash,
-			ClaimSetHash:  vr.ClaimSetHash,
+			ID:              vr.ID,
+			UnitID:          unitID,
+			Label:           vr.Label,
+			Content:         vr.Content,
+			PrevVersionID:   vr.PrevVersionID,
+			ContentHash:     vr.ContentHash,
+			ActorID:         vr.ActorID,
+			MeaningHash:     vr.MeaningHash,
+			ClaimSetHash:    vr.ClaimSetHash,
+			UncertaintyHash: vr.UncertaintyHash,
 		})
 	}
 	return out, nil

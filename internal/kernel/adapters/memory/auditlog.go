@@ -20,3 +20,15 @@ func (l *AuditLog) Append(ev domain.AuditEvent) error {
 	l.Events = append(l.Events, ev)
 	return nil
 }
+
+// Scan implements ports.AuditLogReader by iterating events and calling fn.
+func (l *AuditLog) Scan(fn func(ev domain.AuditEvent) error) error {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, ev := range l.Events {
+		if err := fn(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
