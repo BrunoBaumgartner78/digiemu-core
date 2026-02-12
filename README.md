@@ -1,123 +1,100 @@
-# digiemu-core (Kernel)
+# DigiEmu Core
 
-[![CI](https://github.com/BrunoBaumgartner78/digiemu-core/actions/workflows/ci.yml/badge.svg)](https://github.com/BrunoBaumgartner78/digiemu-core/actions/workflows/ci.yml)
+DigiEmu Core is an auditable knowledge kernel designed to stabilize AI-driven systems through versioned claims, structured governance, and traceable decision logic.
 
-## Run tests
-```bash
-go test ./...
-```
+It is not a chatbot framework.  
+It is not a CMS.  
+It is not an application layer.  
 
-## Adapters
+It is infrastructure.
 
-FS adapter (development JSON store):
+---
 
-- Location: `internal/kernel/adapters/fs`
-- Usage: instantiate with a base path. Example:
+## Purpose
 
-	repo := fs.NewUnitRepo("./data")
+Modern AI systems lack reproducibility, version stability and epistemic traceability. DigiEmu Core introduces a structured knowledge layer that enables:
 
-This adapter stores each unit (and its versions) as a JSON file under the provided base path. It's intended for prototyping and local development.
+- Versioned claims
+- Deterministic content history
+- Audit trails
+- Explicit governance rules
+- Decision logging
 
-## Running API
+The system is designed for environments where traceability and reproducibility are essential (education, research, regulated industries, AI governance).
 
-Run the minimal HTTP API (uses FS adapter):
+---
 
-```bash
-DIGIEMU_DATA_DIR=./data DIGIEMU_ADDR=:8080 go run ./cmd/api
-```
+## Architectural Principles
 
-Create a unit (example request + response):
+- Separation of domain logic from infrastructure
+- Explicit versioning at claim level
+- Immutable historical states
+- Deterministic decision logging
+- Strict boundary between Open Core and commercial extensions
 
-```bash
-curl -s -X POST http://localhost:8080/v1/units \
-	-H "Content-Type: application/json" \
-	-d '{"title":"Demo Unit","description":"Short description"}'
-```
+---
 
-Example response (201):
+## Open Core Scope
 
-```json
-{
-	"unitId": "unit_01...",
-	"createdAt": "2026-02-07T12:34:56Z",
-	"key": "demo-unit",
-	"title": "Demo Unit",
-	"description": "Short description"
-}
-```
+The Open Core includes:
 
-Create a version:
+- Kernel architecture
+- Domain model (Tenant, Content, Claim, Version)
+- Core API ports
+- Governance documentation
+- Decision log structure
+- Ethics and abort criteria framework
 
-```bash
-curl -X POST -H "Content-Type: application/json" -d '{"content":"hello"}' http://localhost:8080/v1/units/my-unit/versions
-```
+---
 
-## HTTP API (cmd/api)
+## Commercial Extensions (Not Included)
 
-Quickstart — start the server and use curl (copy/paste):
+The following components are not part of the Open Core:
 
-1) Start server:
+- Enterprise multi-tenant layer
+- License activation mechanisms
+- Compliance add-ons
+- SLA / support modules
+- Commercial audit tooling
 
-```bash
-go run ./cmd/api --addr :8080 --data ./data
-```
+These components are available under separate commercial licensing.
 
-2) Create a unit (returns `key` and metadata in response):
+---
 
-```bash
-curl -s -X POST http://localhost:8080/v1/units \
-	-H "Content-Type: application/json" \
-	-d '{"title":"Demo Unit","description":"Demo"}'
-```
+## Status
 
-3) Create a version for that unit (use returned `{key}`).
+DigiEmu Core is released as Open Core infrastructure under the Business Source License (BSL 1.1).
 
-Request:
-```bash
-curl -s -X POST http://localhost:8080/v1/units/demo-unit/versions \
-	-H "Content-Type: application/json" \
-	-d '{"content":"v1"}'
-```
+It is intended for controlled adoption, academic validation and responsible system integration.
 
-Example response (201):
+---
 
-```json
-{
-	"versionId": "ver_01...",
-	"createdAt": "2026-02-07T12:35:10Z"
-}
-```
+## Non-Goals
 
-Note: the create-unit response contains the `key` you should use in the versions endpoint.
+DigiEmu Core does not:
 
-## Local Quickstart (CLI + FS)
+- Replace application frameworks
+- Provide conversational AI
+- Offer UI components
+- Replace data storage engines
 
-This repository includes a tiny CLI that uses the FS adapter for local demos.
+It provides epistemic infrastructure only.
 
-Build and run the CLI examples below — the default data directory is `./data`.
+---
 
-Create a unit (auto-generates a key from the title when `--key` is omitted):
+## Governance
 
-```bash
-go run ./cmd/digiemu unit create --title "Demo Unit" --desc "Demo" --data ./data
-```
+Development follows explicit governance principles defined in:
 
-Create a version for an existing unit (use the unit key):
+- GOVERNANCE.md
+- ETHICS.md
+- ABORT_CRITERIA.md
 
-```bash
-go run ./cmd/digiemu version create --unit demo-unit --content "v1" --data ./data
-```
+---
 
-Start the HTTP API (same FS storage used by the CLI):
+## Contact
 
-```bash
-go run ./cmd/digiemu serve --addr :8080 --data ./data
-```
+For academic collaboration or commercial licensing inquiries:
 
-Flags supported by the CLI:
-
-- `--data`: data directory (default `./data`)
-- `--addr`: server address (for `serve`)
-- `--title`, `--desc`: unit creation
-- `--key`: optional explicit unit key
-- `--unit`, `--content`: version creation
+Bruno Baumgartner  
+bruno@brainbloom.ch

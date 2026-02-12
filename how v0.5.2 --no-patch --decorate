@@ -1,0 +1,17 @@
+*   [33m8754af0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;33mtag: [m[1;33mv0.5.2[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge pull request #1 from BrunoBaumgartner78/chore/ci-fix-go-sum-auditlog
+[31m|[m[32m\[m  
+[31m|[m * [33md3bc785[m[33m ([m[1;32mchore/ci-fix-go-sum-auditlog[m[33m)[m chore: remove debug_tamper helper
+[31m|[m * [33m80b0123[m chore(ci): regenerate go.sum; fix audit reader/listing and tamper test; restore strict tamper assertion
+[31m|[m * [33mad9a02c[m chore: add tools import and regenerate go.sum via go mod tidy
+[31m|[m * [33m9f13c23[m chore: add go.sum via go mod tidy
+[31m|[m[31m/[m  
+* [33m0f9e074[m[33m ([m[1;33mtag: [m[1;33mv0.5.1[m[33m)[m chore: remove stray artifact file
+* [33mf105ee6[m[33m ([m[1;33mtag: [m[1;33mv0.5.0[m[33m)[m chore(release): prepare v0.5.0 Uncertainty Minimum
+* [33m1f89e91[m[33m ([m[1;33mtag: [m[1;33mv0.4.0[m[33m)[m docs(claims): add Phase 3.0 claim minimum spec
+* [33m36342d0[m Phase 3.0: Claim minimum (claimset, strict verify, CLI+HTTP)
+* [33m6307558[m[33m ([m[1;33mtag: [m[1;33mv0.3.1[m[33m)[m Meaning Layer v1: set meaning, audit, export/verify, CLI+HTTP
+* [33m89d739b[m[33m ([m[1;33mtag: [m[1;33mv0.3.0[m[33m)[m chore(release): v0.2.9 Audit & Snapshot Stabilization
+* [33me5e8574[m docs: add release notes v0.2.9
+* [33m8893971[m[33m ([m[1;33mtag: [m[1;33mv0.2.9[m[33m)[m v0.2.9: add auditlog adapters (fs+memory)
+* [33m43c7d29[m docs: add PR notes and release notes
+* [33m971ab5e[m v0.2.9: cli export + httpapi wiring
